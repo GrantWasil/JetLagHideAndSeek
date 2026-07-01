@@ -15,6 +15,7 @@ import {
     fetchCoastline,
     findPlacesInZone,
     findPlacesSpecificInZone,
+    LOCATION_EXTRA_FILTER,
     LOCATION_FIRST_TAG,
     nearestToQuestion,
     prettifyLocation,
@@ -191,7 +192,7 @@ export const determineMeasuringBoundary = async (
             const location = question.type.split("-full")[0] as APILocations;
 
             const data = await findPlacesInZone(
-                `[${LOCATION_FIRST_TAG[location]}=${location}]`,
+                `[${LOCATION_FIRST_TAG[location]}=${location}]${LOCATION_EXTRA_FILTER[location] ?? ""}`,
                 `Finding ${prettifyLocation(location, true).toLowerCase()}...`,
                 "nwr",
                 "center",
@@ -324,6 +325,11 @@ export const hiderifyMeasuring = async (question: MeasuringQuestion) => {
             color: "black",
             collapsed: false,
         });
+
+        if (!questionNearest || !hiderNearest) {
+            // No in-bounds instance of this feature type: void for this game.
+            return question;
+        }
 
         question.hiderCloser =
             questionNearest.properties.distanceToPoint >

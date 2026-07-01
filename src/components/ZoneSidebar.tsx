@@ -1168,13 +1168,18 @@ async function selectionProcess(
         ) {
             const nearestQuestion = await nearestToQuestion(question.data);
 
+            if (!nearestQuestion) {
+                // No in-bounds instance of this feature type: skip this station.
+                continue;
+            }
+
             let radius = 30;
 
             let instances: any = { features: [] };
 
             const nearestPoints = [];
 
-            while (instances.features.length === 0) {
+            while (instances.features.length === 0 && radius <= 500) {
                 instances = await findTentacleLocations(
                     {
                         lat: station.properties.geometry.coordinates[1],
@@ -1225,6 +1230,11 @@ async function selectionProcess(
                         )
                         .map((x) => x.point),
                 );
+            }
+
+            if (nearestPoints.length === 0) {
+                // Search hit its cap with nothing in-bounds: skip this station.
+                continue;
             }
 
             if (question.id === "matching") {

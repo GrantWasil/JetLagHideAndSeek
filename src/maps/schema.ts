@@ -246,7 +246,9 @@ const ordinaryMatchingQuestionSchema = baseMatchingQuestionSchema.extend({
                 .literal("park-full")
                 .describe("Park Question (Small+Medium Games)"),
         ])
-        .default("airport"),
+        // Default to a plentiful, boundary-safe type. "airport" is hidden for the
+        // Denver game (void) — see docs/adr/0003-hide-void-questions.md.
+        .default("peak-full"),
 });
 
 const zoneMatchingQuestionsSchema = baseMatchingQuestionSchema.extend({
@@ -307,6 +309,9 @@ const customMatchingQuestionSchema = baseMatchingQuestionSchema.extend({
     type: z.union([
         z.literal("custom-zone").describe("Custom Zone Question"),
         z.literal("custom-points").describe("Custom Points Question"),
+        z
+            .literal("same-named-zone")
+            .describe("Same Named Zone (e.g. Municipality)"),
     ]),
     geo: z.any(),
 });
@@ -368,7 +373,9 @@ const ordinaryMeasuringQuestionSchema = baseMeasuringQuestionSchema.extend({
                 .literal("park-full")
                 .describe("Park Question (Small+Medium Games)"),
         ])
-        .default("coastline"),
+        // Default to a plentiful, boundary-safe type. "coastline" is hidden for
+        // the Denver game (void) — see docs/adr/0003-hide-void-questions.md.
+        .default("peak-full"),
 });
 
 const hidingZoneMeasuringQuestionsSchema = baseMeasuringQuestionSchema.extend({
