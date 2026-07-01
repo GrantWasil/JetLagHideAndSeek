@@ -13,6 +13,7 @@ import { safeUnion } from "@/maps/geo-utils";
 
 import { cacheFetch, determineCache } from "./cache";
 import {
+    LOCATION_EXTRA_FILTER,
     LOCATION_FIRST_TAG,
     OVERPASS_API,
     OVERPASS_API_FALLBACK,
@@ -93,17 +94,34 @@ export const determineGeoJSON = async (
     };
 };
 
+// Returns an Overpass `(poly:"...")` filter clause for the active game
+// boundary, or an empty string when no custom boundary is set. Chaining this
+// onto a query ANDs it with the other filters, so features outside the play
+// boundary are excluded — per the rule that out-of-bounds features do not exist.
+const boundaryPolyClause = (): string => {
+    const $polyGeoJSON = polyGeoJSON.get();
+    if (!$polyGeoJSON) return "";
+    return `(poly:"${turf
+        .getCoords($polyGeoJSON.features)
+        .flatMap((polygon) => polygon.geometry.coordinates)
+        .flat()
+        .map((coord) => [coord[1], coord[0]].join(" "))
+        .join(" ")}")`;
+};
+
 export const findTentacleLocations = async (
     question: EncompassingTentacleQuestionSchema,
     text: string = "Determining tentacle locations...",
 ) => {
+    // Clip candidates to the game boundary (if any): a feature outside the play
+    // boundary must be treated as if it does not exist.
     const query = `
 [out:json][timeout:25];
-nwr["${LOCATION_FIRST_TAG[question.locationType]}"="${question.locationType}"](around:${turf.convertLength(
+nwr["${LOCATION_FIRST_TAG[question.locationType]}"="${question.locationType}"]${LOCATION_EXTRA_FILTER[question.locationType] ?? ""}(around:${turf.convertLength(
         question.radius,
         question.unit,
         "meters",
-    )}, ${question.lat}, ${question.lng});
+    )}, ${question.lat}, ${question.lng})${boundaryPolyClause()};
 out center;
     `;
     const data = await getOverpassData(query, text);
@@ -362,9 +380,24 @@ export const findPlacesSpecificInZone = async (
 export const nearestToQuestion = async (
     question: HomeGameMatchingQuestions | HomeGameMeasuringQuestions,
 ) => {
+    const $polyGeoJSON = polyGeoJSON.get();
+    // Cap the expanding search so a feature type with no in-bounds instance
+    // cannot loop forever. findTentacleLocations already clips to the boundary,
+    // so once the radius spans the boundary there is nothing more to find.
+    let maxRadius = 300;
+    if ($polyGeoJSON) {
+        const bbox = turf.bbox($polyGeoJSON);
+        maxRadius =
+            Math.ceil(
+                turf.distance([bbox[0], bbox[1]], [bbox[2], bbox[3]], {
+                    units: "miles",
+                }),
+            ) + 30;
+    }
+
     let radius = 30;
     let instances: any = { features: [] };
-    while (instances.features.length === 0) {
+    while (instances.features.length === 0 && radius <= maxRadius) {
         instances = await findTentacleLocations(
             {
                 lat: question.lat,
@@ -381,6 +414,13 @@ export const nearestToQuestion = async (
         );
         radius += 30;
     }
+
+    // No instance of this feature type inside the boundary: it does not exist
+    // for this game (a void question). Callers must handle null.
+    if (instances.features.length === 0) {
+        return null;
+    }
+
     const questionPoint = turf.point([question.lng, question.lat]);
     return turf.nearestPoint(questionPoint, instances as any);
 };

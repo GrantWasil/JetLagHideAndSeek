@@ -33,6 +33,16 @@ import {
 
 import { QuestionCard } from "./base";
 
+// Measuring question types with no valid target inside the Denver game boundary,
+// hidden from the picker for this game.
+// See docs/adr/0003-hide-void-questions.md.
+const HIDDEN_MEASURING_TYPES = new Set<string>([
+    "coastline", // landlocked: nearest coast is ~1000 mi outside the boundary
+    "airport", // commercial airport: DEN is out of bounds
+    "city", // no place >= 1,000,000 people inside the boundary
+    "highspeed-measure-shinkansen", // no high-speed rail in Colorado
+]);
+
 export const MeasuringQuestionComponent = ({
     data,
     questionKey,
@@ -178,6 +188,12 @@ export const MeasuringQuestionComponent = ({
                             .flatMap((x) =>
                                 determineUnionizedStrings(x.shape.type),
                             )
+                            .filter(
+                                (x) =>
+                                    !HIDDEN_MEASURING_TYPES.has(
+                                        (x._def as any).value,
+                                    ),
+                            )
                             .map((x) => [(x._def as any).value, x.description]),
                     )}
                     groups={measuringQuestionSchema.options
@@ -185,12 +201,17 @@ export const MeasuringQuestionComponent = ({
                         .map((x) => [
                             x.description,
                             Object.fromEntries(
-                                determineUnionizedStrings(x.shape.type).map(
-                                    (x) => [
+                                determineUnionizedStrings(x.shape.type)
+                                    .filter(
+                                        (x) =>
+                                            !HIDDEN_MEASURING_TYPES.has(
+                                                (x._def as any).value,
+                                            ),
+                                    )
+                                    .map((x) => [
                                         (x._def as any).value,
                                         x.description,
-                                    ],
-                                ),
+                                    ]),
                             ),
                         ])
                         .reduce(

@@ -42,6 +42,14 @@ export const LOCATION_FIRST_TAG: {
     park: "leisure",
 };
 
+// Extra Overpass tag-filter clauses appended for specific locations so they
+// match the game's stricter definitions (Denver tuning).
+// See docs/adr/0003-hide-void-questions.md.
+export const LOCATION_EXTRA_FILTER: Partial<Record<APILocations, string>> = {
+    // The game excludes honorary consulates.
+    consulate: '["consulate"!="honorary_consul"]',
+};
+
 export const BLANK_GEOJSON = {
     type: "FeatureCollection",
     features: [

@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import CustomInitDialog from "@/components/CustomInitDialog";
 import { LatitudeLongitude } from "@/components/LatLngPicker";
 import PresetsDialog from "@/components/PresetsDialog";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -37,6 +38,16 @@ import {
 
 import { QuestionCard } from "./base";
 
+// Matching question types with no valid target inside the Denver game boundary
+// (or trivially single-instance), hidden from the picker for this game.
+// See docs/adr/0003-hide-void-questions.md.
+const HIDDEN_MATCHING_TYPES = new Set<string>([
+    "airport", // commercial airport: DEN is out of bounds; in-bounds airfields aren't bookable
+    "major-city", // no place >= 1,000,000 people inside the boundary
+    "aquarium", // only 1 aquarium in-bounds -> "same" is trivial
+    "aquarium-full",
+]);
+
 export const MatchingQuestionComponent = ({
     data,
     questionKey,
@@ -59,6 +70,42 @@ export const MatchingQuestionComponent = ({
     const [pendingCustomType, setPendingCustomType] = React.useState<
         "custom-zone" | "custom-points" | null
     >(null);
+    const namedZoneFileInputRef = React.useRef<HTMLInputElement>(null);
+
+    // Load a GeoJSON FeatureCollection of named polygons (e.g. municipalities)
+    // for a "same-named-zone" question. Each feature should carry properties.name.
+    const handleNamedZoneFile = async (
+        e: React.ChangeEvent<HTMLInputElement>,
+    ) => {
+        const file = e.target.files?.[0];
+        e.target.value = ""; // allow re-selecting the same file later
+        if (!file) return;
+        try {
+            const parsed = JSON.parse(await file.text());
+            const features = (parsed?.features ?? []).filter(
+                (f: any) =>
+                    f?.geometry &&
+                    (f.geometry.type === "Polygon" ||
+                        f.geometry.type === "MultiPolygon"),
+            );
+            if (features.length === 0) {
+                toast.error("No polygon features found in that file.");
+                return;
+            }
+            const unnamed = features.filter(
+                (f: any) => !f.properties?.name,
+            ).length;
+            (data as any).geo = { type: "FeatureCollection", features };
+            questionModified();
+            toast.success(
+                `Loaded ${features.length} named zone${
+                    features.length === 1 ? "" : "s"
+                }.${unnamed > 0 ? ` (${unnamed} without a name)` : ""}`,
+            );
+        } catch (err) {
+            toast.error(`Could not read GeoJSON: ${err}`);
+        }
+    };
     const label = `Matching
     ${
         $questions
@@ -82,7 +129,7 @@ export const MatchingQuestionComponent = ({
                                 3: "OSM Zone 3 (region in Japan)",
                                 4: "OSM Zone 4 (prefecture in Japan)",
                                 5: "OSM Zone 5",
-                                6: "OSM Zone 6",
+                                6: "OSM Zone 6 (Counties in Colorado)",
                                 7: "OSM Zone 7",
                                 8: "OSM Zone 8",
                                 9: "OSM Zone 9",
@@ -144,6 +191,43 @@ export const MatchingQuestionComponent = ({
                 </span>
             );
             break;
+        case "same-named-zone": {
+            const namedZones = (data as any).geo;
+            const zoneCount = namedZones?.features?.length ?? 0;
+            questionSpecific = (
+                <div className="flex flex-col gap-1 px-2 mb-1">
+                    <p className="text-center text-orange-500">
+                        {zoneCount > 0
+                            ? `${zoneCount} named zone${
+                                  zoneCount === 1 ? "" : "s"
+                              } loaded. "Same" means the hider is in the same named zone as your marker.`
+                            : "Load a GeoJSON FeatureCollection of named zones (each feature needs a properties.name), e.g. your municipalities file."}
+                    </p>
+                    <div className="flex justify-center">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!data.drag || $isLoading}
+                            onClick={() =>
+                                namedZoneFileInputRef.current?.click()
+                            }
+                        >
+                            {zoneCount > 0
+                                ? "Replace zones (GeoJSON)"
+                                : "Load zones (GeoJSON)"}
+                        </Button>
+                        <input
+                            ref={namedZoneFileInputRef}
+                            type="file"
+                            accept=".geojson,.json,application/geo+json,application/json"
+                            className="hidden"
+                            onChange={handleNamedZoneFile}
+                        />
+                    </div>
+                </div>
+            );
+            break;
+        }
         case "custom-zone":
         case "custom-points":
             if (data.drag) {
@@ -250,6 +334,12 @@ export const MatchingQuestionComponent = ({
                             .flatMap((x) =>
                                 determineUnionizedStrings(x.shape.type),
                             )
+                            .filter(
+                                (x) =>
+                                    !HIDDEN_MATCHING_TYPES.has(
+                                        (x._def as any).value,
+                                    ),
+                            )
                             .map((x) => [(x._def as any).value, x.description]),
                     )}
                     groups={matchingQuestionSchema.options
@@ -257,12 +347,17 @@ export const MatchingQuestionComponent = ({
                         .map((x) => [
                             x.description,
                             Object.fromEntries(
-                                determineUnionizedStrings(x.shape.type).map(
-                                    (x) => [
+                                determineUnionizedStrings(x.shape.type)
+                                    .filter(
+                                        (x) =>
+                                            !HIDDEN_MATCHING_TYPES.has(
+                                                (x._def as any).value,
+                                            ),
+                                    )
+                                    .map((x) => [
                                         (x._def as any).value,
                                         x.description,
-                                    ],
-                                ),
+                                    ]),
                             ),
                         ])
                         .reduce(
@@ -346,6 +441,21 @@ export const MatchingQuestionComponent = ({
                                 }
                             }
                             // The category should be defined such that no error is thrown if this is a zone question.
+                            if (!(data as any).cat) {
+                                (data as any).cat = { adminLevel: 3 };
+                            }
+                            questionModified((data.type = value));
+                            return;
+                        }
+
+                        if (value === "same-named-zone") {
+                            // Keep a previously-imported FeatureCollection;
+                            // drop stale geo from another question type so the
+                            // card prompts for an import.
+                            const g = (data as any).geo;
+                            if (!g || !Array.isArray(g.features)) {
+                                (data as any).geo = undefined;
+                            }
                             if (!(data as any).cat) {
                                 (data as any).cat = { adminLevel: 3 };
                             }

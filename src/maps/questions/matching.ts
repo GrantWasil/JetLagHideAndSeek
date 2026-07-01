@@ -19,6 +19,7 @@ import {
 import {
     findAdminBoundary,
     findPlacesInZone,
+    LOCATION_EXTRA_FILTER,
     LOCATION_FIRST_TAG,
     nearestToQuestion,
     prettifyLocation,
@@ -80,7 +81,7 @@ export const findMatchingPlaces = async (question: MatchingQuestion) => {
             const location = question.type.split("-full")[0] as APILocations;
 
             const data = await findPlacesInZone(
-                `[${LOCATION_FIRST_TAG[location]}=${location}]`,
+                `[${LOCATION_FIRST_TAG[location]}=${location}]${LOCATION_EXTRA_FILTER[location] ?? ""}`,
                 `Finding ${prettifyLocation(location, true).toLowerCase()}...`,
                 "nwr",
                 "center",
@@ -141,6 +142,32 @@ export const determineMatchingBoundary = _.memoize(
             }
             case "custom-zone": {
                 boundary = question.geo;
+                break;
+            }
+            case "same-named-zone": {
+                // question.geo is a FeatureCollection of named polygons (e.g.
+                // municipalities). "Same" = hider is in the same named zone as
+                // the seeker, so the boundary is simply the named zone that
+                // contains the seeker's marker. Each named zone is a single
+                // (possibly Multi-)Polygon feature, so no name merging is needed.
+                const collection = question.geo as
+                    | FeatureCollection<Polygon | MultiPolygon>
+                    | undefined;
+
+                if (!collection?.features?.length) {
+                    // No named zones loaded yet — nothing to narrow by.
+                    return false;
+                }
+
+                const point = turf.point([question.lng, question.lat]);
+                boundary = collection.features.find((feature) =>
+                    turf.booleanPointInPolygon(point, feature),
+                );
+
+                if (!boundary) {
+                    // Seeker's marker isn't inside any named zone.
+                    return false;
+                }
                 break;
             }
             case "zone": {
@@ -305,6 +332,12 @@ export const hiderifyMatching = async (question: MatchingQuestion) => {
             color: "black",
             collapsed: false,
         });
+
+        if (!questionNearest || !hiderNearest) {
+            // No in-bounds instance of this feature type: void for this game,
+            // so there is nothing to compare. Leave the answer untouched.
+            return question;
+        }
 
         question.same =
             questionNearest.properties.name === hiderNearest.properties.name;
