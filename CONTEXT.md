@@ -1,6 +1,8 @@
 # Denver Hide & Seek (fork tuning)
 
-This fork tunes the Jet Lag: Hide & Seek map generator for **one specific game**: a Medium-size game in the **western Denver metro**, played on **RTD** transit. The vocabulary below is the game's ubiquitous language *as this fork uses it*. It intentionally deviates from the upstream tool, which models the game more loosely to support development generally.
+This fork tunes the Jet Lag: Hide & Seek map generator for **one specific game**: a Medium-size game in the **western Denver metro**, played on **RTD** transit. The vocabulary below is the game's ubiquitous language _as this fork uses it_. It intentionally deviates from the upstream tool, which models the game more loosely to support development generally.
+
+Which question types the picker offers for this game is owned by the `src/maps/question-availability.ts` module (`HIDDEN_QUESTION_TYPES`, `isQuestionTypeAvailable`, `availableOptions`) — the single home for "is this question available?". The schema stays a pure validation model; availability is a picker concern layered on top. (See ADR 0010.)
 
 ## Language
 
@@ -8,16 +10,18 @@ This fork tunes the Jet Lag: Hide & Seek map generator for **one specific game**
 The polygon defining the playable map for the game. Supplied as a custom border (Google My Maps KML). Any feature outside it is treated as if it does not exist — for every matching and measuring question.
 _Avoid_: map area, region, zone, bounding box.
 
+The boundary lives in app state as the `polyGeoJSON` atom (`src/lib/context.ts`); its geometry operations — clipping an Overpass query to it, testing whether a point is inside it, and capping a search radius to its bbox — are owned by the deep `src/maps/play-boundary.ts` module (`clipQuery`, `contains`, `bboxCapMiles`). The atom is the state; the module is the geometry. (See ADR 0008.)
+
 **Void Question**:
 A question whose feature type has no qualifying instance inside the Play Boundary, so per the rules it can only return a null answer (which still counts as answered). For this game these include commercial airport (DEN is out of bounds), coastline, and high-speed rail.
 _Avoid_: dead question, disabled question.
 
 **Commercial Airport**:
-An airport you can book a flight to/from on Google Flights. Not merely "an airport with an IATA code." For this game the only bookable one (DEN) sits outside the Play Boundary; the three airfields inside it — Buckley Space Force Base, Centennial (APA), Rocky Mountain Metro (BJC) — all carry IATA codes but are *not* commercial, so a correct game answer here is null.
+An airport you can book a flight to/from on Google Flights. Not merely "an airport with an IATA code." For this game the only bookable one (DEN) sits outside the Play Boundary; the three airfields inside it — Buckley Space Force Base, Centennial (APA), Rocky Mountain Metro (BJC) — all carry IATA codes but are _not_ commercial, so a correct game answer here is null.
 _Avoid_: aerodrome, airfield, IATA airport.
 
 **1st Administrative Division**:
-For this game, a Colorado **county** (Adams, Arapahoe, Boulder, Broomfield, Denver, Douglas, Jefferson) — *not* a state. The hierarchy is shifted down one level because a state-level division is useless at metro scale.
+For this game, a Colorado **county** (Adams, Arapahoe, Boulder, Broomfield, Denver, Douglas, Jefferson) — _not_ a state. The hierarchy is shifted down one level because a state-level division is useless at metro scale.
 _Avoid_: state, region, prefecture.
 
 **2nd Administrative Division**:

@@ -5,21 +5,15 @@ import osmtogeojson from "osmtogeojson";
 import { toast } from "react-toastify";
 
 import {
-    customStations,
-    displayHidingZonesOptions,
     hiderMode,
-    includeDefaultStations,
     mapGeoJSON,
     mapGeoLocation,
     polyGeoJSON,
-    useCustomStations,
 } from "@/lib/context";
 import {
     fetchCoastline,
     findPlacesInZone,
     findPlacesSpecificInZone,
-    LOCATION_EXTRA_FILTER,
-    LOCATION_FIRST_TAG,
     nearestToQuestion,
     prettifyLocation,
     QuestionSpecificLocation,
@@ -31,17 +25,20 @@ import {
     holedMask,
     modifyMapData,
 } from "@/maps/geo-utils";
+import {
+    elementToPoint,
+    findCategoryPlaces,
+    findRawPlaces,
+} from "@/maps/questions/category-places";
+import { isHomeGameType } from "@/maps/questions/home-game-types";
+import { materializeStationsForQuestion } from "@/maps/questions/transit-stations-for-question";
 import type {
     APILocations,
     HomeGameMeasuringQuestions,
     MeasuringQuestion,
 } from "@/maps/schema";
 
-import {
-    materializeTransitStations,
-    resolveTransitMeasuringQuestion,
-} from "./transit";
-import { findTransitStationsAroundPoints } from "./transit-overpass";
+import { resolveTransitMeasuringQuestion } from "./transit";
 
 const highSpeedBase = _.memoize(
     (features: Feature[]) => {
@@ -160,12 +157,7 @@ export const determineMeasuringBoundary = async (
                                 )
                             ).elements,
                             (feature: any) => feature.tags.iata,
-                        ).map((x: any) =>
-                            turf.point([
-                                x.center ? x.center.lon : x.lon,
-                                x.center ? x.center.lat : x.lat,
-                            ]),
-                        ),
+                        ).map(elementToPoint),
                     ),
                 ).features[0],
             ];
@@ -173,16 +165,9 @@ export const determineMeasuringBoundary = async (
             return [
                 turf.combine(
                     turf.featureCollection(
-                        (
-                            await findPlacesInZone(
-                                '[place=city]["population"~"^[1-9]+[0-9]{6}$"]', // The regex is faster than (if:number(t["population"])>1000000)
-                                "Finding cities...",
-                            )
-                        ).elements.map((x: any) =>
-                            turf.point([
-                                x.center ? x.center.lon : x.lon,
-                                x.center ? x.center.lat : x.lat,
-                            ]),
+                        await findRawPlaces(
+                            '[place=city]["population"~"^[1-9]+[0-9]{6}$"]', // The regex is faster than (if:number(t["population"])>1000000)
+                            "Finding cities...",
                         ),
                     ),
                 ).features[0],
@@ -199,47 +184,25 @@ export const determineMeasuringBoundary = async (
         case "consulate-full":
         case "park-full": {
             const location = question.type.split("-full")[0] as APILocations;
+            const result = await findCategoryPlaces(location);
 
-            const data = await findPlacesInZone(
-                `[${LOCATION_FIRST_TAG[location]}=${location}]${LOCATION_EXTRA_FILTER[location] ?? ""}`,
-                `Finding ${prettifyLocation(location, true).toLowerCase()}...`,
-                "nwr",
-                "center",
-                [],
-                60,
-            );
-
-            if (data.remark && data.remark.startsWith("runtime error")) {
+            if ("error" in result) {
                 toast.error(
-                    `Error finding ${prettifyLocation(
-                        location,
-                        true,
-                    ).toLowerCase()}. Please enable hiding zone mode and switch to the Large Game variation of this question.`,
-                );
-                return [turf.multiPolygon([])];
-            }
-
-            if (data.elements.length >= 1000) {
-                toast.error(
-                    `Too many ${prettifyLocation(
-                        location,
-                        true,
-                    ).toLowerCase()} found (${data.elements.length}). Please enable hiding zone mode and switch to the Large Game variation of this question.`,
+                    result.error === "too-many"
+                        ? `Too many ${prettifyLocation(
+                              location,
+                              true,
+                          ).toLowerCase()} found (${result.count}). Please enable hiding zone mode and switch to the Large Game variation of this question.`
+                        : `Error finding ${prettifyLocation(
+                              location,
+                              true,
+                          ).toLowerCase()}. Please enable hiding zone mode and switch to the Large Game variation of this question.`,
                 );
                 return [turf.multiPolygon([])];
             }
 
             return [
-                turf.combine(
-                    turf.featureCollection(
-                        data.elements.map((x: any) =>
-                            turf.point([
-                                x.center ? x.center.lon : x.lon,
-                                x.center ? x.center.lat : x.lat,
-                            ]),
-                        ),
-                    ),
-                ).features[0],
+                turf.combine(turf.featureCollection(result.points)).features[0],
             ];
         }
         case "custom-measure":
@@ -307,21 +270,7 @@ export const hiderifyMeasuring = async (question: MeasuringQuestion) => {
         return question;
     }
 
-    if (
-        [
-            "aquarium",
-            "zoo",
-            "theme_park",
-            "peak",
-            "museum",
-            "hospital",
-            "cinema",
-            "library",
-            "golf_course",
-            "consulate",
-            "park",
-        ].includes(question.type)
-    ) {
+    if (isHomeGameType(question.type)) {
         const questionNearest = await nearestToQuestion(
             question as HomeGameMeasuringQuestions,
         );
@@ -353,20 +302,7 @@ export const hiderifyMeasuring = async (question: MeasuringQuestion) => {
             { lat: question.lat, lng: question.lng },
             { lat: $hiderMode.latitude, lng: $hiderMode.longitude },
         ];
-        const needsDefaultStations =
-            !useCustomStations.get() || includeDefaultStations.get();
-        const selection = displayHidingZonesOptions.get();
-        const defaultStations =
-            needsDefaultStations && selection.length > 0
-                ? await findTransitStationsAroundPoints({ selection, points })
-                : [];
-        const stations = materializeTransitStations({
-            defaultStations,
-            customStations: customStations.get(),
-            useCustomStations: useCustomStations.get(),
-            includeDefaultStations: includeDefaultStations.get(),
-            playBoundary: polyGeoJSON.get() ?? undefined,
-        });
+        const stations = await materializeStationsForQuestion(points);
         const result = resolveTransitMeasuringQuestion({
             question,
             hiderLocation: {

@@ -23,6 +23,10 @@ import {
     triggerLocalRefresh,
 } from "@/lib/context";
 import { cn } from "@/lib/utils";
+import {
+    availableOptions,
+    isQuestionTypeAvailable,
+} from "@/maps/question-availability";
 import { determineMeasuringBoundary } from "@/maps/questions/measuring";
 import {
     determineUnionizedStrings,
@@ -32,35 +36,6 @@ import {
 } from "@/maps/schema";
 
 import { QuestionCard } from "./base";
-
-// Measuring question types hidden from the picker for this game. Reasons:
-//   - void inside the boundary (see docs/adr/0003).
-//   - not one of the game's 20 official measuring questions (see docs/adr/0005).
-//   - large-game-only: we're playing a Medium game, so the "Large Game
-//     variation" of the category questions is hidden (see docs/adr/0006).
-// The underlying types stay in the schema so old saved games still parse.
-const HIDDEN_MEASURING_TYPES = new Set<string>([
-    "coastline", // landlocked: nearest coast is ~1000 mi outside the boundary
-    "airport", // commercial airport: DEN is out of bounds
-    "city", // "major city" is not an official question (and no >=1M city in-bounds)
-    "highspeed-measure-shinkansen", // no high-speed rail in Colorado
-    "mcdonalds", // not an official measuring question (show-only)
-    "seven11", // not an official measuring question (show-only)
-    // Large Game variation of the category questions (hiding-zone based). For a
-    // Medium game these are answered with the "(Small+Medium Games)" -full
-    // versions instead. rail-measure (Train Station) stays -- the RTD game uses it.
-    "aquarium",
-    "zoo",
-    "theme_park",
-    "peak",
-    "museum",
-    "hospital",
-    "cinema",
-    "library",
-    "golf_course",
-    "consulate",
-    "park",
-]);
 
 export const MeasuringQuestionComponent = ({
     data,
@@ -202,18 +177,11 @@ export const MeasuringQuestionComponent = ({
                 <Select
                     trigger="Measuring Type"
                     options={Object.fromEntries(
-                        measuringQuestionSchema.options
-                            .filter((x) => x.description === NO_GROUP)
-                            .flatMap((x) =>
-                                determineUnionizedStrings(x.shape.type),
-                            )
-                            .filter(
-                                (x) =>
-                                    !HIDDEN_MEASURING_TYPES.has(
-                                        (x._def as any).value,
-                                    ),
-                            )
-                            .map((x) => [(x._def as any).value, x.description]),
+                        availableOptions(
+                            measuringQuestionSchema,
+                            "type",
+                            "measuring",
+                        ),
                     )}
                     groups={measuringQuestionSchema.options
                         .filter((x) => x.description !== NO_GROUP)
@@ -221,11 +189,11 @@ export const MeasuringQuestionComponent = ({
                             x.description,
                             Object.fromEntries(
                                 determineUnionizedStrings(x.shape.type)
-                                    .filter(
-                                        (x) =>
-                                            !HIDDEN_MEASURING_TYPES.has(
-                                                (x._def as any).value,
-                                            ),
+                                    .filter((x) =>
+                                        isQuestionTypeAvailable(
+                                            "measuring",
+                                            (x._def as any).value,
+                                        ),
                                     )
                                     .map((x) => [
                                         (x._def as any).value,

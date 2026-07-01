@@ -25,6 +25,10 @@ import {
 } from "@/lib/context";
 import { cn } from "@/lib/utils";
 import {
+    availableOptions,
+    isQuestionTypeAvailable,
+} from "@/maps/question-availability";
+import {
     determineMatchingBoundary,
     findMatchingPlaces,
 } from "@/maps/questions/matching";
@@ -36,34 +40,6 @@ import {
 } from "@/maps/schema";
 
 import { QuestionCard } from "./base";
-
-// Matching question types hidden from the picker for this game. Three reasons:
-//   - void: no valid target inside the Denver game boundary (see docs/adr/0003).
-//   - not a real Jet Lag question (see docs/adr/0005).
-//   - large-game-only: we're playing a Medium game, so the "Large Game
-//     variation" of the category questions is hidden (see docs/adr/0006).
-// The underlying types stay in the schema so old saved games still parse.
-const HIDDEN_MATCHING_TYPES = new Set<string>([
-    "airport", // commercial airport: DEN is out of bounds; in-bounds airfields aren't bookable
-    "major-city", // not one of the 20 real matching questions (and no >=1M city in-bounds)
-    "aquarium", // only 1 aquarium in-bounds -> "same" is trivial (also the large-game variant)
-    "aquarium-full",
-    "letter-zone", // "Zone Starts With Same Letter" is not a real Jet Lag question
-    "same-first-letter-station", // "Station Starts With Same Letter" is not a real Jet Lag question
-    // Large Game variation of the category questions (hiding-zone based). For a
-    // Medium game these are answered with the "(Small+Medium Games)" -full
-    // versions instead. Station questions stay -- the RTD game uses them.
-    "zoo",
-    "theme_park",
-    "peak",
-    "museum",
-    "hospital",
-    "cinema",
-    "library",
-    "golf_course",
-    "consulate",
-    "park",
-]);
 
 export const MatchingQuestionComponent = ({
     data,
@@ -279,18 +255,11 @@ export const MatchingQuestionComponent = ({
                 <Select
                     trigger="Matching Type"
                     options={Object.fromEntries(
-                        matchingQuestionSchema.options
-                            .filter((x) => x.description === NO_GROUP)
-                            .flatMap((x) =>
-                                determineUnionizedStrings(x.shape.type),
-                            )
-                            .filter(
-                                (x) =>
-                                    !HIDDEN_MATCHING_TYPES.has(
-                                        (x._def as any).value,
-                                    ),
-                            )
-                            .map((x) => [(x._def as any).value, x.description]),
+                        availableOptions(
+                            matchingQuestionSchema,
+                            "type",
+                            "matching",
+                        ),
                     )}
                     groups={matchingQuestionSchema.options
                         .filter((x) => x.description !== NO_GROUP)
@@ -298,11 +267,11 @@ export const MatchingQuestionComponent = ({
                             x.description,
                             Object.fromEntries(
                                 determineUnionizedStrings(x.shape.type)
-                                    .filter(
-                                        (x) =>
-                                            !HIDDEN_MATCHING_TYPES.has(
-                                                (x._def as any).value,
-                                            ),
+                                    .filter((x) =>
+                                        isQuestionTypeAvailable(
+                                            "matching",
+                                            (x._def as any).value,
+                                        ),
                                     )
                                     .map((x) => [
                                         (x._def as any).value,

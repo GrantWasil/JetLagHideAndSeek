@@ -7,6 +7,7 @@ import type {
 } from "geojson";
 
 import type { CustomStation, StationCircle, StationPlace } from "@/maps/api";
+import { contains, type PlayBoundary } from "@/maps/play-boundary";
 import type { MatchingQuestion, MeasuringQuestion } from "@/maps/schema";
 
 export type TransitPoint = {
@@ -73,14 +74,17 @@ export const materializeTransitStations = ({
 
     const insidePlayBoundary = (station: StationPlace) => {
         if (!playBoundary) return true;
-
-        if (playBoundary.type === "FeatureCollection") {
-            return playBoundary.features.some((feature) =>
-                turf.booleanPointInPolygon(station, feature),
-            );
-        }
-
-        return turf.booleanPointInPolygon(station, playBoundary);
+        // The play boundary may arrive as a single Feature or a
+        // FeatureCollection; normalize so the contains() op (which takes a
+        // FeatureCollection) handles both. See src/maps/play-boundary.ts.
+        const boundary: PlayBoundary =
+            playBoundary.type === "FeatureCollection"
+                ? playBoundary
+                : {
+                      type: "FeatureCollection",
+                      features: [playBoundary],
+                  };
+        return contains(boundary, station);
     };
 
     const filterToPlayBoundary = (stations: StationPlace[]) =>

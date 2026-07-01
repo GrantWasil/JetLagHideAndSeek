@@ -1,7 +1,7 @@
 import * as turf from "@turf/turf";
 import { expect, test } from "vitest";
 
-import { geoSpatialVoronoi } from "@/maps/geo-utils/operators";
+import { geoSpatialVoronoi } from "@/maps/geo-utils";
 
 test("voronoi diagram", () => {
     const BASE_POINT_COUNT = 25;
