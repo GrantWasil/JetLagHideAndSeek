@@ -29,4 +29,5 @@ RTD bus and rail (light rail + commuter rail). The "same transit line" question 
 _Avoid_: train-only, subway, metro.
 
 **Major City**:
-(Upstream tool term; usage under review.) Upstream defines it as a `place=city` with population ≥ 1,000,000. No place inside the Play Boundary meets that bar (Denver proper ≈ 715k), so as defined it is a Void Question for this game.
+A `place=city` with population ≥ 1,000,000 (upstream's definition). No place inside the Play Boundary meets that bar (Denver proper ≈ 715k), so for this game it is a **Void Question**, hidden from the matching/measuring pickers.
+_Avoid_: big city, metropolis.

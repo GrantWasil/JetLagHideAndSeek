@@ -2,6 +2,23 @@
 
 Fork tuned for one Medium-size Hide & Seek game in the **western Denver metro** on **RTD** transit. Context/decisions: see [CONTEXT.md](CONTEXT.md) and [docs/adr/](docs/adr/). Scope: **correctness first (A, B, E, counties); features C/D as stretch.**
 
+## Deployment
+
+**Live:** https://grantwasil.github.io/JetLagHideAndSeek/ — static GitHub Pages, built by [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) (Node 24 + pnpm). Rationale + gotchas: [ADR 0007](docs/adr/0007-host-on-github-pages.md).
+
+- **Deploy a change:** commit to `main`, then `gh workflow run deploy.yml --ref main` — a plain `git push` does **not** reliably trigger the workflow in this fork (see ADR 0007) — then `gh run watch <id>`. Verify live by `curl`-ing the URL and grepping the served `_astro/*.js`.
+- **Local build/preview** needs the Node-25 workaround (`NODE_OPTIONS="--localstorage-file=..."`, see Environment note below); CI builds fine on Node 24.
+- **Game-day polish shipped:** initial map zoom 5 → 10 (frames the Denver metro, not the continent) + viewport `initial-scale=1` for phones.
+- **Teardown after the game:** Settings → Pages → Source → "None", or make the repo private.
+
+### Known runtime dependencies & risks (game-day)
+
+The app is fully client-side and calls third parties directly from the browser; any of these can be blocked by venue Wi-Fi or a privacy blocker:
+
+- **Overpass API** (OSM data for every non-transit question) — primary `overpass-api.de`; the configured fallback `overpass.private.coffee` was **unreachable** when tested, and `src/maps/api/cache.ts` uses a bare `fetch()` with **no client-side timeout**, so a stalled host shows an endless "Loading map data…" toast rather than an error. Highest risk with ~6 players sharing one IP (rate-limiting → 429). *Mitigation if needed:* add an ~20s `AbortController` timeout and/or repoint the fallback at a live mirror.
+- **ArcGIS CDN** (`js.arcgis.com`) — serves the geometry `pe-wasm.wasm` (see ADR 0007).
+- **Google Fonts / GTM / Clarity** + **upstream-hosted icons** (`taibeled.github.io`) — inherited from upstream; non-fatal if blocked (degrades typography/analytics/icons only).
+
 ## Prerequisite (no app code)
 - [x] Convert the 3 Google My Maps KMLs → GeoJSON. Output in [`denver-game/`](denver-game/):
   - `denver-border.hidingzone.json` — the border, emitted in the tool's **save-file shape** (FeatureCollection + `disabledStations:[]` etc.) so it imports via Options → Load without tripping the loader's unguarded `disabledStations.constructor` access. Geometry validated (DEN/Boulder/Colorado Springs out; downtown/Golden/Denver Zoo in).

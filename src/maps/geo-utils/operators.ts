@@ -1,4 +1,8 @@
 import * as units from "@arcgis/core/core/units.js";
+// These ArcGIS geometry operators load their WebAssembly module (pe-wasm.wasm) from the
+// js.arcgis.com CDN (ArcGIS's default assetsPath), NOT from our own build output. So a 404 on
+// /_astro/pe-wasm.wasm is EXPECTED and harmless — it is not a broken deploy, and geometry still
+// works. (An automated check once mis-flagged this as critical.) See docs/adr/0007-host-on-github-pages.md.
 import * as geodesicBufferOperator from "@arcgis/core/geometry/operators/geodesicBufferOperator.js";
 import * as geodeticDistanceOperator from "@arcgis/core/geometry/operators/geodeticDistanceOperator.js";
 import Point from "@arcgis/core/geometry/Point.js";
