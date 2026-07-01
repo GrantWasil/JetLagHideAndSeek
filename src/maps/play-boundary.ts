@@ -30,14 +30,18 @@ import type {
 
 export type PlayBoundary = FeatureCollection<Polygon | MultiPolygon>;
 
-// A `(poly:"lat lng lat lng …")` Overpass filter clause for the boundary's
-// outer rings, ANDed onto a query's element filters so Overpass excludes
-// out-of-bounds features server-side. Holes are intentionally NOT emitted:
-// Overpass `poly` matches a closed ring, not a polygon-with-holes, so emitting
-// hole rings would create a self-intersecting shape (the previous `.flat()`
-// bug). Server-side exclusion by outer ring + the client-side `contains`
-// post-filter together give correct in/out behavior.
-export const clipQuery = (boundary: PlayBoundary): string => {
+// One `(poly:"lat lng lat lng …")` Overpass filter clause per OUTER ring of
+// the boundary. Returns an array so callers can emit one Overpass element
+// statement per ring (ORing them in the union) — joining disconnected rings
+// into a single clause makes Overpass treat them as one self-intersecting
+// polygon and can EXCLUDE valid points inside either ring (false negatives the
+// client-side `contains` post-filter cannot recover, since Overpass never
+// returned them). Holes are intentionally NOT emitted: Overpass `poly` matches
+// a closed ring, not a polygon-with-holes. Server-side exclusion by outer ring
+// + the client-side `contains` post-filter together give correct in/out
+// behavior. For the common single-Polygon case (this fork's default boundary)
+// the array has exactly one element.
+export const clipQuery = (boundary: PlayBoundary): string[] => {
     const rings: Position[][] = [];
     for (const feature of boundary.features) {
         const geom = feature.geometry;
@@ -47,10 +51,10 @@ export const clipQuery = (boundary: PlayBoundary): string => {
             for (const polygon of geom.coordinates) rings.push(polygon[0]);
         }
     }
-    const joined = rings
-        .map((ring) => ring.map(([lng, lat]) => `${lat} ${lng}`).join(" "))
-        .join(" ");
-    return `(poly:"${joined}")`;
+    return rings.map(
+        (ring) =>
+            `(poly:"${ring.map(([lng, lat]) => `${lat} ${lng}`).join(" ")}")`,
+    );
 };
 
 // True if the point lies inside any of the boundary's polygons (holes honored

@@ -10,11 +10,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // so we can drive each branch: primary ok, primary rejects (network hang),
 // both fail. This is the agreed seam.
 
-const cacheFetch = vi.fn();
+const cacheFetch =
+    vi.fn<
+        (
+            url: string,
+            loadingText?: string,
+            cacheType?: unknown,
+        ) => Promise<unknown>
+    >();
 const mockCache = { put: vi.fn(), match: vi.fn(), delete: vi.fn() };
+const determineCache = vi.fn<
+    (cacheType?: unknown) => Promise<typeof mockCache>
+>(async () => mockCache);
 vi.mock("@/maps/api/cache", () => ({
-    cacheFetch: (...a: unknown[]) => cacheFetch(...a),
-    determineCache: async () => mockCache,
+    cacheFetch: (url: string, loadingText?: string, cacheType?: unknown) =>
+        cacheFetch(url, loadingText, cacheType),
+    determineCache: (cacheType?: unknown) => determineCache(cacheType),
 }));
 
 // Stub toast so the error-path side effect doesn't surface in test output.
@@ -50,7 +61,11 @@ const badResponse = (status = 500) =>
     }) as any;
 
 describe("getOverpassData fallback policy", () => {
-    beforeEach(() => cacheFetch.mockReset());
+    beforeEach(() => {
+        cacheFetch.mockReset();
+        determineCache.mockReset();
+        determineCache.mockResolvedValue(mockCache);
+    });
 
     it("returns the primary response's data when the primary succeeds", async () => {
         cacheFetch.mockResolvedValue(okResponse({ elements: [{ id: 1 }] }));
@@ -95,5 +110,27 @@ describe("getOverpassData fallback policy", () => {
 
         expect(data).toEqual({ elements: [] });
         expect(cacheFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps the fallback response even if the cache write fails (P2a)", async () => {
+        // The fallback host succeeded; but the best-effort cache-put under the
+        // primary key can fail if CacheStorage is unavailable. That failure must
+        // NOT discard the good fallback response. Previously the cache write sat
+        // inside the same try as the fallback fetch, so a put rejection threw to
+        // the catch and returned { elements: [] }.
+        cacheFetch
+            .mockResolvedValueOnce(badResponse(504)) // primary HTTP error
+            .mockResolvedValueOnce(okResponse({ elements: [{ id: 7 }] })); // fallback ok
+        // determineCache rejects (CacheStorage unavailable).
+        vi.mocked(determineCache).mockRejectedValueOnce(
+            new Error("caches unavailable"),
+        );
+        // Silence the expected console.log from the best-effort catch.
+        const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        const data = await getOverpassData("[out:json];node(1);out;");
+
+        expect(data).toEqual({ elements: [{ id: 7 }] });
+        logSpy.mockRestore();
     });
 });

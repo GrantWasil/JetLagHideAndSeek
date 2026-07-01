@@ -51,20 +51,26 @@ export const getOverpassData = async (
     }
 
     if (primaryFailed) {
-        // Try the fallback, but store the result under the primary URL key so
-        // future requests are served from cache without needing to fail-over
-        // again.
+        // Try the fallback. Only the fetch is load-bearing here — the cache
+        // write (store under the primary key so future requests skip the
+        // fail-over) is best-effort, matching cacheFetch's own treatment of
+        // cache access. Previously the cache write sat in the same try as the
+        // fetch, so a CacheStorage failure discarded a good fallback response.
         try {
             const fallbackResponse = await cacheFetch(
                 `${OVERPASS_API_FALLBACK}?data=${encodedQuery}`,
                 loadingText,
                 cacheType,
             );
-            if (fallbackResponse.ok) {
-                const cache = await determineCache(cacheType);
-                await cache.put(primaryUrl, fallbackResponse.clone());
-            }
             response = fallbackResponse;
+            if (fallbackResponse.ok) {
+                try {
+                    const cache = await determineCache(cacheType);
+                    await cache.put(primaryUrl, fallbackResponse.clone());
+                } catch (e) {
+                    console.log(e); // Best-effort: CacheStorage unavailable.
+                }
+            }
         } catch {
             toast.error("Could not load data from Overpass", {
                 toastId: "overpass-error",
@@ -110,31 +116,32 @@ export const determineGeoJSON = async (
     };
 };
 
-// Returns an Overpass `(poly:"...")` filter clause for the active game
-// boundary, or an empty string when no custom boundary is set. Chaining this
-// onto a query ANDs it with the other filters, so features outside the play
-// boundary are excluded — per the rule that out-of-bounds features do not exist.
-// The geometry transform itself lives in src/maps/play-boundary.ts (clipQuery);
-// this wrapper just owns the "no boundary → empty clause" fallback for the
-// tentacle query, which wants an inline empty string rather than a null check.
-const boundaryPolyClause = (): string => {
-    const $polyGeoJSON = polyGeoJSON.get();
-    return $polyGeoJSON ? clipQuery($polyGeoJSON) : "";
-};
-
 export const findTentacleLocations = async (
     question: EncompassingTentacleQuestionSchema,
     text: string = "Determining tentacle locations...",
 ) => {
+    // Capture the boundary ONCE (mirrors findPlacesInZone). Reading it before
+    // the await and again after meant a mid-flight boundary change could make
+    // the server query and client post-filter disagree.
+    const $polyGeoJSON = polyGeoJSON.get();
+    const polyClauses = $polyGeoJSON ? clipQuery($polyGeoJSON) : [];
+
     // Clip candidates to the game boundary (if any): a feature outside the play
-    // boundary must be treated as if it does not exist.
+    // boundary must be treated as if it does not exist. One Overpass statement
+    // per outer ring (ORed in the union) so a disconnected MultiPolygon isn't
+    // encoded as one self-intersecting polygon.
+    const elementFilter = `nwr["${LOCATION_FIRST_TAG[question.locationType]}"="${question.locationType}"]${LOCATION_EXTRA_FILTER[question.locationType] ?? ""}(around:${turf.convertLength(question.radius, question.unit, "meters")}, ${question.lat}, ${question.lng})`;
+    const statements =
+        polyClauses.length > 0
+            ? polyClauses
+                  .map((clause) => `${elementFilter}${clause};`)
+                  .join("\n")
+            : `${elementFilter};`;
     const query = `
 [out:json][timeout:25];
-nwr["${LOCATION_FIRST_TAG[question.locationType]}"="${question.locationType}"]${LOCATION_EXTRA_FILTER[question.locationType] ?? ""}(around:${turf.convertLength(
-        question.radius,
-        question.unit,
-        "meters",
-    )}, ${question.lat}, ${question.lng})${boundaryPolyClause()};
+(
+${statements}
+);
 out center;
     `;
     const data = await getOverpassData(query, text);
@@ -142,7 +149,6 @@ out center;
     // Post-filter against the boundary: the server-side (poly:"...") clause
     // clips to outer rings, but Overpass still matches points inside holes.
     // Drop any element whose center is not contained by the boundary (ADR 0008).
-    const $polyGeoJSON = polyGeoJSON.get();
     if ($polyGeoJSON) {
         elements = elements.filter((el: any) => {
             const lon = el.center ? el.center.lon : el.lon;
@@ -308,18 +314,20 @@ export const findPlacesInZone = async (
     let query = "";
     const $polyGeoJSON = polyGeoJSON.get();
     if ($polyGeoJSON) {
-        const polyClause = clipQuery($polyGeoJSON);
+        // One Overpass element statement per outer ring (ORed in the union).
+        // clipQuery returns one (poly:"...") clause per ring so disconnected
+        // MultiPolygons aren't encoded as one self-intersecting polygon.
+        const polyClauses = clipQuery($polyGeoJSON);
+        const allFilters = [filter, ...alternatives];
+        const statements = polyClauses
+            .flatMap((clause) =>
+                allFilters.map((f) => `${searchType}${f}${clause};`),
+            )
+            .join("\n");
         query = `
 [out:json]${timeoutDuration != 0 ? `[timeout:${timeoutDuration}]` : ""};
 (
-${searchType}${filter}${polyClause};
-${
-    alternatives.length > 0
-        ? alternatives
-              .map((alternative) => `${searchType}${alternative}${polyClause};`)
-              .join("\n")
-        : ""
-}
+${statements}
 );
 out ${outType};
 `;

@@ -40,7 +40,9 @@ test('clipQuery emits an Overpass (poly:"...") clause', () => {
             ],
         ]),
     ]);
-    const clause = clipQuery(boundary);
+    const clauses = clipQuery(boundary);
+    expect(clauses).toHaveLength(1);
+    const clause = clauses[0];
     expect(clause.startsWith(`(poly:"`)).toBe(true);
     expect(clause.endsWith(`")`)).toBe(true);
     // Overpass wants "lat lng" pairs (lat first); GeoJSON is [lng, lat].
@@ -48,7 +50,9 @@ test('clipQuery emits an Overpass (poly:"...") clause', () => {
 });
 
 test("clipQuery emits the outer ring only, NOT the hole — fixes the .flat() bug", () => {
-    const clause = clipQuery(boundaryWithHole);
+    const clauses = clipQuery(boundaryWithHole);
+    expect(clauses).toHaveLength(1);
+    const clause = clauses[0];
     // The outer ring's corners (0 and 10) must appear.
     expect(clause).toContain("0 0");
     expect(clause).toContain("10 10");
@@ -58,7 +62,13 @@ test("clipQuery emits the outer ring only, NOT the hole — fixes the .flat() bu
     expect(clause).not.toContain("7 7");
 });
 
-test("clipQuery handles a MultiPolygon by emitting each outer ring", () => {
+test("clipQuery emits a SEPARATE (poly:...) clause per disconnected outer ring (MultiPolygon)", () => {
+    // Two disconnected squares 10 units apart. Joined into one (poly:"...")
+    // clause, Overpass treats them as a single self-intersecting polygon and
+    // can EXCLUDE valid points inside either square (false negatives the
+    // client-side contains post-filter cannot recover — Overpass never
+    // returned them). Correct behavior requires one clause per outer ring,
+    // ORed together in the caller's Overpass union.
     const multi = turf.featureCollection([
         turf.multiPolygon([
             [
@@ -81,14 +91,34 @@ test("clipQuery handles a MultiPolygon by emitting each outer ring", () => {
             ],
         ]),
     ]);
-    const clause = clipQuery(multi);
-    expect(clause).toContain("0 0");
-    expect(clause).toContain("10 10");
+    const clauses = clipQuery(multi);
+    // Two disconnected rings => two separate (poly:"...") clauses.
+    expect(clauses).toHaveLength(2);
+    expect(clauses[0]).toContain("0 0");
+    expect(clauses[1]).toContain("10 10");
+});
+
+test("clipQuery emits a single (poly:...) clause for one connected Polygon", () => {
+    // A plain polygon (one outer ring) is one clause — no change from before.
+    const single = turf.featureCollection([
+        turf.polygon([
+            [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+                [0, 1],
+                [0, 0],
+            ],
+        ]),
+    ]);
+    expect(clipQuery(single)).toHaveLength(1);
 });
 
 test("clipQuery emits all vertices of the real Denver default boundary", () => {
     // The fork's actual boundary is a single 76-vertex closed ring (no holes).
-    const clause = clipQuery(DEFAULT_PLAY_BOUNDARY);
+    const clauses = clipQuery(DEFAULT_PLAY_BOUNDARY);
+    expect(clauses).toHaveLength(1);
+    const clause = clauses[0];
     // First and last coordinate of the ring, in "lat lng" form.
     expect(clause).toContain("39.6853795 -104.7283707");
     // Every outer-ring vertex should round-trip — count approximates by
