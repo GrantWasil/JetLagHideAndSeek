@@ -3,6 +3,15 @@ import { toast } from "react-toastify";
 
 import { CacheType } from "./types";
 
+// Client-side deadline for every fetch through cacheFetch. A stalled host
+// (Overpass, coastline, municipalities) used to hang forever — the server-side
+// Overpass `[timeout:25]` only helps if the server accepts the request; a host
+// that accepts the TCP connection but never responds was indefinite. This turns
+// that hang into a rejection after 20s, which getOverpassData then turns into a
+// fallback to the mirror host (see overpass.ts). 20s is generous for a real
+// query and well under a user's patience threshold.
+const FETCH_TIMEOUT_MS = 20000;
+
 const determineQuestionCache = _.memoize(() => caches.open(CacheType.CACHE));
 const determineZoneCache = _.memoize(() => caches.open(CacheType.ZONE_CACHE));
 const determinePermanentCache = _.memoize(() =>
@@ -47,7 +56,9 @@ export const cacheFetch = async (
         }
 
         const fetchAndMaybeCache = async () => {
-            const response = await fetch(url);
+            const response = await fetch(url, {
+                signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+            });
             if (response.ok) {
                 await cache.put(url, response.clone());
             } else {
@@ -73,7 +84,9 @@ export const cacheFetch = async (
     } catch (e) {
         console.log(e); // Probably a caches not supported error
 
-        return fetch(url);
+        return fetch(url, {
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
     }
 };
 

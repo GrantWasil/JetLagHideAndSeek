@@ -10,6 +10,7 @@ import {
     polyGeoJSON,
 } from "@/lib/context";
 import { safeUnion } from "@/maps/geo-utils";
+import { bboxCapMiles, clipQuery } from "@/maps/play-boundary";
 
 import { cacheFetch, determineCache } from "./cache";
 import {
@@ -33,10 +34,26 @@ export const getOverpassData = async (
 ) => {
     const encodedQuery = encodeURIComponent(query);
     const primaryUrl = `${OVERPASS_API}?data=${encodedQuery}`;
-    let response = await cacheFetch(primaryUrl, loadingText, cacheType);
+    // The primary fetch can reject (network hang/timeout/DNS/CORS) as well as
+    // return non-ok. Either way we try the fallback host — previously a
+    // rejection escaped here, so the fallback was unreachable in exactly the
+    // failure modes that motivate having one. cacheFetch now enforces a
+    // client-side timeout (see cache.ts), so a stalled host rejects rather than
+    // hanging forever.
+    let response: Response;
+    let primaryFailed = false;
+    try {
+        response = await cacheFetch(primaryUrl, loadingText, cacheType);
+        if (!response.ok) primaryFailed = true;
+    } catch {
+        primaryFailed = true;
+        response = undefined as unknown as Response; // satisfy TS for the fallthrough
+    }
 
-    if (!response.ok) {
-        // Try the fallback, but store the result under the primary URL key so future requests are served from cache without needing to fail-over again.
+    if (primaryFailed) {
+        // Try the fallback, but store the result under the primary URL key so
+        // future requests are served from cache without needing to fail-over
+        // again.
         try {
             const fallbackResponse = await cacheFetch(
                 `${OVERPASS_API_FALLBACK}?data=${encodedQuery}`,
@@ -49,10 +66,9 @@ export const getOverpassData = async (
             }
             response = fallbackResponse;
         } catch {
-            toast.error(
-                `Could not load data from Overpass: ${response.status} ${response.statusText}`,
-                { toastId: "overpass-error" },
-            );
+            toast.error("Could not load data from Overpass", {
+                toastId: "overpass-error",
+            });
             return { elements: [] };
         }
     }
@@ -98,15 +114,12 @@ export const determineGeoJSON = async (
 // boundary, or an empty string when no custom boundary is set. Chaining this
 // onto a query ANDs it with the other filters, so features outside the play
 // boundary are excluded — per the rule that out-of-bounds features do not exist.
+// The geometry transform itself lives in src/maps/play-boundary.ts (clipQuery);
+// this wrapper just owns the "no boundary → empty clause" fallback for the
+// tentacle query, which wants an inline empty string rather than a null check.
 const boundaryPolyClause = (): string => {
     const $polyGeoJSON = polyGeoJSON.get();
-    if (!$polyGeoJSON) return "";
-    return `(poly:"${turf
-        .getCoords($polyGeoJSON.features)
-        .flatMap((polygon) => polygon.geometry.coordinates)
-        .flat()
-        .map((coord) => [coord[1], coord[0]].join(" "))
-        .join(" ")}")`;
+    return $polyGeoJSON ? clipQuery($polyGeoJSON) : "";
 };
 
 export const findTentacleLocations = async (
@@ -283,27 +296,15 @@ export const findPlacesInZone = async (
     let query = "";
     const $polyGeoJSON = polyGeoJSON.get();
     if ($polyGeoJSON) {
+        const polyClause = clipQuery($polyGeoJSON);
         query = `
 [out:json]${timeoutDuration != 0 ? `[timeout:${timeoutDuration}]` : ""};
 (
-${searchType}${filter}(poly:"${turf
-            .getCoords($polyGeoJSON.features)
-            .flatMap((polygon) => polygon.geometry.coordinates)
-            .flat()
-            .map((coord) => [coord[1], coord[0]].join(" "))
-            .join(" ")}");
+${searchType}${filter}${polyClause};
 ${
     alternatives.length > 0
         ? alternatives
-              .map(
-                  (alternative) =>
-                      `${searchType}${alternative}(poly:"${turf
-                          .getCoords($polyGeoJSON.features)
-                          .flatMap((polygon) => polygon.geometry.coordinates)
-                          .flat()
-                          .map((coord) => [coord[1], coord[0]].join(" "))
-                          .join(" ")}");`,
-              )
+              .map((alternative) => `${searchType}${alternative}${polyClause};`)
               .join("\n")
         : ""
 }
@@ -416,13 +417,7 @@ export const nearestToQuestion = async (
     // so once the radius spans the boundary there is nothing more to find.
     let maxRadius = 300;
     if ($polyGeoJSON) {
-        const bbox = turf.bbox($polyGeoJSON);
-        maxRadius =
-            Math.ceil(
-                turf.distance([bbox[0], bbox[1]], [bbox[2], bbox[3]], {
-                    units: "miles",
-                }),
-            ) + 30;
+        maxRadius = bboxCapMiles($polyGeoJSON);
     }
 
     let radius = 30;

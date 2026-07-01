@@ -23,6 +23,10 @@ import {
 import { cn, mapToObj } from "@/lib/utils";
 import { findTentacleLocations } from "@/maps/api";
 import {
+    availableOptions,
+    isQuestionTypeAvailable,
+} from "@/maps/question-availability";
+import {
     determineUnionizedStrings,
     NO_GROUP,
     type TentacleQuestion,
@@ -31,17 +35,6 @@ import {
 } from "@/maps/schema";
 
 import { QuestionCard } from "./base";
-
-// Tentacle location types hidden from the picker for this game. The
-// "15 Miles (Typically)" categories are the Large Game tentacle; we're playing
-// a Medium game, so only the "1 Mile (Typically)" categories are offered.
-// The types stay in the schema so old saved games still parse.
-// See docs/adr/0006-hide-large-game-options.md.
-const HIDDEN_TENTACLE_TYPES = new Set<string>([
-    "theme_park",
-    "zoo",
-    "aquarium",
-]);
 
 export const TentacleQuestionComponent = ({
     data,
@@ -106,18 +99,11 @@ export const TentacleQuestionComponent = ({
                 <Select
                     trigger="Location Type"
                     options={Object.fromEntries(
-                        tentacleQuestionSchema.options
-                            .filter((x) => x.description === NO_GROUP)
-                            .flatMap((x) =>
-                                determineUnionizedStrings(x.shape.locationType),
-                            )
-                            .filter(
-                                (x) =>
-                                    !HIDDEN_TENTACLE_TYPES.has(
-                                        (x._def as any).value,
-                                    ),
-                            )
-                            .map((x) => [(x._def as any).value, x.description]),
+                        availableOptions(
+                            tentacleQuestionSchema,
+                            "locationType",
+                            "tentacles",
+                        ),
                     )}
                     groups={Object.fromEntries(
                         tentacleQuestionSchema.options
@@ -128,11 +114,11 @@ export const TentacleQuestionComponent = ({
                                     determineUnionizedStrings(
                                         x.shape.locationType,
                                     )
-                                        .filter(
-                                            (x) =>
-                                                !HIDDEN_TENTACLE_TYPES.has(
-                                                    (x._def as any).value,
-                                                ),
+                                        .filter((x) =>
+                                            isQuestionTypeAvailable(
+                                                "tentacles",
+                                                (x._def as any).value,
+                                            ),
                                         )
                                         .map((x) => [
                                             (x._def as any).value,

@@ -5,34 +5,29 @@ import osmtogeojson from "osmtogeojson";
 import { toast } from "react-toastify";
 
 import {
-    customStations,
-    displayHidingZonesOptions,
     hiderMode,
-    includeDefaultStations,
     mapGeoJSON,
     mapGeoLocation,
     polyGeoJSON,
-    useCustomStations,
 } from "@/lib/context";
 import {
     fetchDenverMunicipalities,
     findAdminBoundary,
     findPlacesInZone,
-    LOCATION_EXTRA_FILTER,
-    LOCATION_FIRST_TAG,
     nearestToQuestion,
     prettifyLocation,
 } from "@/maps/api";
 import { holedMask, modifyMapData, safeUnion } from "@/maps/geo-utils";
 import { geoSpatialVoronoi } from "@/maps/geo-utils";
 import {
-    materializeTransitStations,
-    resolveTransitMatchingQuestion,
-} from "@/maps/questions/transit";
-import {
-    findTransitStationsAroundPoints,
-    overpassTransitLineMembershipResolver,
-} from "@/maps/questions/transit-overpass";
+    elementToPoint,
+    findCategoryPlaces,
+    findRawPlaces,
+} from "@/maps/questions/category-places";
+import { isHomeGameType } from "@/maps/questions/home-game-types";
+import { resolveTransitMatchingQuestion } from "@/maps/questions/transit";
+import { overpassTransitLineMembershipResolver } from "@/maps/questions/transit-overpass";
+import { materializeStationsForQuestion } from "@/maps/questions/transit-stations-for-question";
 import type {
     APILocations,
     HomeGameMatchingQuestions,
@@ -42,6 +37,9 @@ import type {
 export const findMatchingPlaces = async (question: MatchingQuestion) => {
     switch (question.type) {
         case "airport": {
+            // Dedup on the raw IATA tag BEFORE projecting (two elements may
+            // share an IATA code); projection itself is the shared
+            // elementToPoint so it can't drift from the city/*-full paths.
             return _.uniqBy(
                 (
                     await findPlacesInZone(
@@ -50,24 +48,12 @@ export const findMatchingPlaces = async (question: MatchingQuestion) => {
                     )
                 ).elements,
                 (feature: any) => feature.tags.iata,
-            ).map((x) =>
-                turf.point([
-                    x.center ? x.center.lon : x.lon,
-                    x.center ? x.center.lat : x.lat,
-                ]),
-            );
+            ).map(elementToPoint);
         }
         case "major-city": {
-            return (
-                await findPlacesInZone(
-                    '[place=city]["population"~"^[1-9]+[0-9]{6}$"]', // The regex is faster than (if:number(t["population"])>1000000)
-                    "Finding cities...",
-                )
-            ).elements.map((x: any) =>
-                turf.point([
-                    x.center ? x.center.lon : x.lon,
-                    x.center ? x.center.lat : x.lat,
-                ]),
+            return findRawPlaces(
+                '[place=city]["population"~"^[1-9]+[0-9]{6}$"]', // The regex is faster than (if:number(t["population"])>1000000)
+                "Finding cities...",
             );
         }
         case "custom-points": {
@@ -85,42 +71,26 @@ export const findMatchingPlaces = async (question: MatchingQuestion) => {
         case "consulate-full":
         case "park-full": {
             const location = question.type.split("-full")[0] as APILocations;
+            const result = await findCategoryPlaces(location);
 
-            const data = await findPlacesInZone(
-                `[${LOCATION_FIRST_TAG[location]}=${location}]${LOCATION_EXTRA_FILTER[location] ?? ""}`,
-                `Finding ${prettifyLocation(location, true).toLowerCase()}...`,
-                "nwr",
-                "center",
-                [],
-                60,
-            );
-
-            if (data.remark && data.remark.startsWith("runtime error")) {
+            // The fetch+guard+project lives in findCategoryPlaces; the toast
+            // (a UI side effect) stays here so the seam stays side-effect-free.
+            if ("error" in result) {
                 toast.error(
-                    `Error finding ${prettifyLocation(
-                        location,
-                        true,
-                    ).toLowerCase()}. Please enable hiding zone mode and switch to the Large Game variation of this question.`,
+                    result.error === "too-many"
+                        ? `Too many ${prettifyLocation(
+                              location,
+                              true,
+                          ).toLowerCase()} found (${result.count}). Please enable hiding zone mode and switch to the Large Game variation of this question.`
+                        : `Error finding ${prettifyLocation(
+                              location,
+                              true,
+                          ).toLowerCase()}. Please enable hiding zone mode and switch to the Large Game variation of this question.`,
                 );
                 return [];
             }
 
-            if (data.elements.length >= 1000) {
-                toast.error(
-                    `Too many ${prettifyLocation(
-                        location,
-                        true,
-                    ).toLowerCase()} found (${data.elements.length}). Please enable hiding zone mode and switch to the Large Game variation of this question.`,
-                );
-                return [];
-            }
-
-            return data.elements.map((x: any) =>
-                turf.point([
-                    x.center ? x.center.lon : x.lon,
-                    x.center ? x.center.lat : x.lat,
-                ]),
-            );
+            return result.points;
         }
     }
 };
@@ -323,21 +293,7 @@ export const hiderifyMatching = async (question: MatchingQuestion) => {
         return question;
     }
 
-    if (
-        [
-            "aquarium",
-            "zoo",
-            "theme_park",
-            "peak",
-            "museum",
-            "hospital",
-            "cinema",
-            "library",
-            "golf_course",
-            "consulate",
-            "park",
-        ].includes(question.type)
-    ) {
+    if (isHomeGameType(question.type)) {
         const questionNearest = await nearestToQuestion(
             question as HomeGameMatchingQuestions,
         );
@@ -373,20 +329,7 @@ export const hiderifyMatching = async (question: MatchingQuestion) => {
             { lat: question.lat, lng: question.lng },
             { lat: $hiderMode.latitude, lng: $hiderMode.longitude },
         ];
-        const needsDefaultStations =
-            !useCustomStations.get() || includeDefaultStations.get();
-        const selection = displayHidingZonesOptions.get();
-        const defaultStations =
-            needsDefaultStations && selection.length > 0
-                ? await findTransitStationsAroundPoints({ selection, points })
-                : [];
-        const stations = materializeTransitStations({
-            defaultStations,
-            customStations: customStations.get(),
-            useCustomStations: useCustomStations.get(),
-            includeDefaultStations: includeDefaultStations.get(),
-            playBoundary: polyGeoJSON.get() ?? undefined,
-        });
+        const stations = await materializeStationsForQuestion(points);
         const result = await resolveTransitMatchingQuestion({
             question,
             hiderLocation: {
