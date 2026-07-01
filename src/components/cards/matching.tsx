@@ -5,7 +5,6 @@ import { toast } from "react-toastify";
 import CustomInitDialog from "@/components/CustomInitDialog";
 import { LatitudeLongitude } from "@/components/LatLngPicker";
 import PresetsDialog from "@/components/PresetsDialog";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -43,9 +42,11 @@ import { QuestionCard } from "./base";
 // See docs/adr/0003-hide-void-questions.md.
 const HIDDEN_MATCHING_TYPES = new Set<string>([
     "airport", // commercial airport: DEN is out of bounds; in-bounds airfields aren't bookable
-    "major-city", // no place >= 1,000,000 people inside the boundary
+    "major-city", // not one of the 20 real matching questions (and no >=1M city in-bounds)
     "aquarium", // only 1 aquarium in-bounds -> "same" is trivial
     "aquarium-full",
+    "letter-zone", // "Zone Starts With Same Letter" is not a real Jet Lag question
+    "same-first-letter-station", // "Station Starts With Same Letter" is not a real Jet Lag question
 ]);
 
 export const MatchingQuestionComponent = ({
@@ -70,42 +71,6 @@ export const MatchingQuestionComponent = ({
     const [pendingCustomType, setPendingCustomType] = React.useState<
         "custom-zone" | "custom-points" | null
     >(null);
-    const namedZoneFileInputRef = React.useRef<HTMLInputElement>(null);
-
-    // Load a GeoJSON FeatureCollection of named polygons (e.g. municipalities)
-    // for a "same-named-zone" question. Each feature should carry properties.name.
-    const handleNamedZoneFile = async (
-        e: React.ChangeEvent<HTMLInputElement>,
-    ) => {
-        const file = e.target.files?.[0];
-        e.target.value = ""; // allow re-selecting the same file later
-        if (!file) return;
-        try {
-            const parsed = JSON.parse(await file.text());
-            const features = (parsed?.features ?? []).filter(
-                (f: any) =>
-                    f?.geometry &&
-                    (f.geometry.type === "Polygon" ||
-                        f.geometry.type === "MultiPolygon"),
-            );
-            if (features.length === 0) {
-                toast.error("No polygon features found in that file.");
-                return;
-            }
-            const unnamed = features.filter(
-                (f: any) => !f.properties?.name,
-            ).length;
-            (data as any).geo = { type: "FeatureCollection", features };
-            questionModified();
-            toast.success(
-                `Loaded ${features.length} named zone${
-                    features.length === 1 ? "" : "s"
-                }.${unnamed > 0 ? ` (${unnamed} without a name)` : ""}`,
-            );
-        } catch (err) {
-            toast.error(`Could not read GeoJSON: ${err}`);
-        }
-    };
     const label = `Matching
     ${
         $questions
@@ -134,32 +99,38 @@ export const MatchingQuestionComponent = ({
                                 8: "OSM Zone 8",
                                 9: "OSM Zone 9",
                                 10: "OSM Zone 10",
+                                "denver-municipalities":
+                                    "Denver Municipalities",
                             }}
                             value={data.cat.adminLevel.toString()}
                             onValueChange={(value) =>
                                 questionModified(
-                                    (data.cat.adminLevel = parseInt(value) as
-                                        | 2
-                                        | 3
-                                        | 4
-                                        | 5
-                                        | 6
-                                        | 7
-                                        | 8
-                                        | 9
-                                        | 10),
+                                    (data.cat.adminLevel =
+                                        value === "denver-municipalities"
+                                            ? "denver-municipalities"
+                                            : (parseInt(value) as
+                                                  | 2
+                                                  | 3
+                                                  | 4
+                                                  | 5
+                                                  | 6
+                                                  | 7
+                                                  | 8
+                                                  | 9
+                                                  | 10)),
                                 )
                             }
                             disabled={!data.drag || $isLoading}
                         />
                     </SidebarMenuItem>
-                    {data.type === "letter-zone" && (
-                        <span className="px-2 text-center text-orange-500">
-                            Warning: The zone data has been simplified by
-                            &plusmn;360 feet (100 meters) in order for the
-                            browser to not crash.
-                        </span>
-                    )}
+                    {data.type === "letter-zone" &&
+                        data.cat.adminLevel !== "denver-municipalities" && (
+                            <span className="px-2 text-center text-orange-500">
+                                Warning: The zone data has been simplified by
+                                &plusmn;360 feet (100 meters) in order for the
+                                browser to not crash.
+                            </span>
+                        )}
                 </>
             );
             break;
@@ -191,43 +162,6 @@ export const MatchingQuestionComponent = ({
                 </span>
             );
             break;
-        case "same-named-zone": {
-            const namedZones = (data as any).geo;
-            const zoneCount = namedZones?.features?.length ?? 0;
-            questionSpecific = (
-                <div className="flex flex-col gap-1 px-2 mb-1">
-                    <p className="text-center text-orange-500">
-                        {zoneCount > 0
-                            ? `${zoneCount} named zone${
-                                  zoneCount === 1 ? "" : "s"
-                              } loaded. "Same" means the hider is in the same named zone as your marker.`
-                            : "Load a GeoJSON FeatureCollection of named zones (each feature needs a properties.name), e.g. your municipalities file."}
-                    </p>
-                    <div className="flex justify-center">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={!data.drag || $isLoading}
-                            onClick={() =>
-                                namedZoneFileInputRef.current?.click()
-                            }
-                        >
-                            {zoneCount > 0
-                                ? "Replace zones (GeoJSON)"
-                                : "Load zones (GeoJSON)"}
-                        </Button>
-                        <input
-                            ref={namedZoneFileInputRef}
-                            type="file"
-                            accept=".geojson,.json,application/geo+json,application/json"
-                            className="hidden"
-                            onChange={handleNamedZoneFile}
-                        />
-                    </div>
-                </div>
-            );
-            break;
-        }
         case "custom-zone":
         case "custom-points":
             if (data.drag) {
@@ -441,21 +375,6 @@ export const MatchingQuestionComponent = ({
                                 }
                             }
                             // The category should be defined such that no error is thrown if this is a zone question.
-                            if (!(data as any).cat) {
-                                (data as any).cat = { adminLevel: 3 };
-                            }
-                            questionModified((data.type = value));
-                            return;
-                        }
-
-                        if (value === "same-named-zone") {
-                            // Keep a previously-imported FeatureCollection;
-                            // drop stale geo from another question type so the
-                            // card prompts for an import.
-                            const g = (data as any).geo;
-                            if (!g || !Array.isArray(g.features)) {
-                                (data as any).geo = undefined;
-                            }
                             if (!(data as any).cat) {
                                 (data as any).cat = { adminLevel: 3 };
                             }

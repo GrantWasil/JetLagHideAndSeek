@@ -39,17 +39,22 @@ Feature queries no longer leak out-of-bounds instances, and the runaway search l
 
 Verification for A+B+E: `tsc` 0 new errors (10 pre-existing), `vitest` 17/17, Prettier clean, ESLint clean.
 
-### C — Municipality named-zone matching type — ✅ DONE (verified)
-New `same-named-zone` matching type (see [ADR 0002](docs/adr/0002-admin-zones-county-osm-municipality-custom.md)):
-- `schema.ts`: added `same-named-zone` to `customMatchingQuestionSchema` (reuses `geo`, `same`).
-- `matching.ts`: `determineMatchingBoundary` case picks the FeatureCollection feature containing the seeker's marker (no `turf.combine`); `modifyMapData` + the generic hider-mode path handle same/different. Each named zone is one (Multi)Polygon feature, so no name-merging needed.
-- `matching.tsx`: "Load zones (GeoJSON)" file import (`handleNamedZoneFile`) sets `data.geo`; type-specific card shows loaded-zone count; picker entry + `onValueChange` reset of stale geo.
-- Verified end-to-end in-app: type persists/reparses, picker shows it, importing a FeatureCollection narrows the map to the seeker's named zone (synthetic 2-zone test cut the boundary exactly at the zone divide). 0 new type errors, 17/17 tests, lint clean.
-- **To use:** add a Matching question → type "Same Named Zone (e.g. Municipality)" → Load zones (GeoJSON) → pick `denver-game/denver-municipalities.geojson`.
-- ⚠️ Caveat: that file is ~2.3 MB; it's stored inline in the question (localStorage + share payloads). Fine for local play; if sluggish or near localStorage limits, simplify/reduce coordinate precision in the converter.
+### C — Municipalities as a "Denver Municipalities" option in the Zone question — ✅ DONE (verified)
+Folded into the existing Zone / Zone-starts-with-same-letter matching question — no separate matching type (see [ADR 0002](docs/adr/0002-admin-zones-county-osm-municipality-custom.md)):
+- `schema.ts`: `cat.adminLevel` gains a `"denver-municipalities"` sentinel alongside the OSM levels 2–10.
+- `matching.ts`: the `zone` case picks the bundled municipality polygon containing the seeker; the `letter-zone` case unions all municipalities whose name starts with the same letter. `modifyMapData` + the generic hider-mode path handle same/different unchanged.
+- Municipalities are **bundled**: `public/denver-municipalities.geojson` (~1.2 MB, 36 zones) served + fetched via `fetchDenverMunicipalities()`. No per-game file load; nothing bulky stored in the question/localStorage/shares.
+- `matching.tsx`: the zone-level dropdown gains a "Denver Municipalities" entry (non-numeric value handled in `onValueChange`); the ±360 ft simplification warning is hidden for it. The standalone `same-named-zone` type, its card UI, and the GeoJSON file-import were removed.
+- Verified end-to-end in-app: **Zone** + "Denver Municipalities" narrows to the seeker's municipality (Lakewood); **letter-zone** unions same-first-letter municipalities (L → Lakewood/Lakeside/Littleton/Lone Tree/Lafayette). 0 new type errors, 17/17 tests, lint clean.
+- **To use:** add a Matching question → type **Zone** (or **Zone Starts With Same Letter**) → zone-level dropdown → **Denver Municipalities**. (Re-generate the bundled file: `python3 denver-game/convert_kml_to_geojson.py <dir-with-kmls>`.)
 
 ### D — RTD bus + rail transit — ⬜ STRETCH
 Wire station matching to the transit selection (`matching.ts:326`, node→nwr); add `route=bus` line matching (ref + network=RTD); **nearest-stop via bounded query** (4,473 stops > 1,000-element guard). See [ADR 0004](docs/adr/0004-model-rtd-bus-lines.md).
+
+### F — Rules parity — ✅ audit done; embellishments hidden, gaps backlogged
+Audited every tool option vs the official 20 Matching + 20 Measuring + Radar/Thermometer/Tentacle. See [ADR 0005](docs/adr/0005-question-parity.md).
+- **Hidden as non-official:** Zone/Station "starts with same letter", Major City, McDonald's, 7-Eleven (added to the `HIDDEN_*` sets).
+- **Backlog (official questions not yet built, deferred):** Sea Level (altitude), Body of Water, Street or Path, Metro-line tentacle, 1st/2nd admin-division *border* distance. (International Border and Landmass are void/irrelevant for this boundary.)
 
 ## Verification
 `pnpm exec tsc --noEmit` (expect 10 pre-existing errors) · `pnpm exec vitest run` (17 tests).

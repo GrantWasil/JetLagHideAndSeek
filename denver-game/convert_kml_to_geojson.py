@@ -7,8 +7,9 @@ Outputs (next to this script):
                                        loadHidingZone sets it as the boundary).
   - denver-counties.geojson         -> reference for 1st-admin (counties use
                                        OSM Zone 6, so this is informational).
-  - denver-municipalities.geojson   -> load into a "Same Named Zone" matching
-                                       question for 2nd-admin (municipalities).
+  - ../public/denver-municipalities.geojson -> bundled with the app and used by
+                                       default for the "Same Named Zone" matching
+                                       question (2nd-admin / municipalities).
 
 Coordinates are rounded to COORD_PRECISION decimals (~1 m at 5) and written as
 compact JSON to keep the municipality file small enough for localStorage/sharing;
@@ -31,6 +32,9 @@ COORD_PRECISION = 5
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = sys.argv[1] if len(sys.argv) > 1 else HERE
 OUT = HERE
+# The municipality zones are bundled with the app (served + fetched at runtime),
+# so they go in public/ rather than here.
+PUBLIC = os.path.join(os.path.dirname(HERE), "public")
 
 
 def parse_ring(text):
@@ -116,8 +120,8 @@ sizes = {
         os.path.join(OUT, "denver-counties.geojson"),
         feature_collection(os.path.join(SRC, "county_zones_colored.kml")),
     ),
-    "denver-municipalities.geojson": write(
-        os.path.join(OUT, "denver-municipalities.geojson"),
+    "../public/denver-municipalities.geojson": write(
+        os.path.join(PUBLIC, "denver-municipalities.geojson"),
         feature_collection(os.path.join(SRC, "second_admin_zones_filled_colored.kml")),
     ),
 }

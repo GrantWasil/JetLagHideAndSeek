@@ -270,6 +270,9 @@ const zoneMatchingQuestionsSchema = baseMatchingQuestionSchema.extend({
                 z.literal(8),
                 z.literal(9),
                 z.literal(10),
+                // Not an OSM admin level: use the bundled Denver municipality
+                // polygons instead of an OSM admin relation.
+                z.literal("denver-municipalities"),
             ]),
         })
         .default(() => ({ adminLevel: 3 }) as { adminLevel: 3 }),
@@ -309,9 +312,6 @@ const customMatchingQuestionSchema = baseMatchingQuestionSchema.extend({
     type: z.union([
         z.literal("custom-zone").describe("Custom Zone Question"),
         z.literal("custom-points").describe("Custom Points Question"),
-        z
-            .literal("same-named-zone")
-            .describe("Same Named Zone (e.g. Municipality)"),
     ]),
     geo: z.any(),
 });
