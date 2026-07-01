@@ -1,5 +1,5 @@
 import * as turf from "@turf/turf";
-import type { FeatureCollection, MultiPolygon } from "geojson";
+import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import _ from "lodash";
 import osmtogeojson from "osmtogeojson";
 import { toast } from "react-toastify";
@@ -181,6 +181,19 @@ export const fetchCoastline = async () => {
     );
     const data = await response.json();
     return data;
+};
+
+// The Denver municipality zones bundled with this fork, used by default for the
+// "same-named-zone" matching question so players don't have to load a file.
+export const fetchDenverMunicipalities = async (): Promise<
+    FeatureCollection<Polygon | MultiPolygon>
+> => {
+    const response = await cacheFetch(
+        import.meta.env.BASE_URL + "/denver-municipalities.geojson",
+        "Loading Denver municipalities...",
+        CacheType.PERMANENT_CACHE,
+    );
+    return await response.json();
 };
 
 export const trainLineNodeFinder = async (node: string): Promise<number[]> => {

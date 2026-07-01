@@ -17,6 +17,7 @@ import {
     polyGeoJSON,
 } from "@/lib/context";
 import {
+    fetchDenverMunicipalities,
     findAdminBoundary,
     findPlacesInZone,
     LOCATION_EXTRA_FILTER,
@@ -145,17 +146,20 @@ export const determineMatchingBoundary = _.memoize(
                 break;
             }
             case "same-named-zone": {
-                // question.geo is a FeatureCollection of named polygons (e.g.
-                // municipalities). "Same" = hider is in the same named zone as
-                // the seeker, so the boundary is simply the named zone that
-                // contains the seeker's marker. Each named zone is a single
-                // (possibly Multi-)Polygon feature, so no name merging is needed.
-                const collection = question.geo as
+                // "Same" = hider is in the same named zone as the seeker, so the
+                // boundary is simply the named zone that contains the seeker's
+                // marker. Each named zone is a single (possibly Multi-)Polygon
+                // feature, so no name merging is needed.
+                // Default to the bundled Denver municipalities; question.geo is
+                // only set when the player imported a custom FeatureCollection.
+                const custom = question.geo as
                     | FeatureCollection<Polygon | MultiPolygon>
                     | undefined;
+                const collection = custom?.features?.length
+                    ? custom
+                    : await fetchDenverMunicipalities();
 
                 if (!collection?.features?.length) {
-                    // No named zones loaded yet — nothing to narrow by.
                     return false;
                 }
 

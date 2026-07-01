@@ -194,16 +194,17 @@ export const MatchingQuestionComponent = ({
         case "same-named-zone": {
             const namedZones = (data as any).geo;
             const zoneCount = namedZones?.features?.length ?? 0;
+            const usingCustom = zoneCount > 0;
             questionSpecific = (
                 <div className="flex flex-col gap-1 px-2 mb-1">
                     <p className="text-center text-orange-500">
-                        {zoneCount > 0
-                            ? `${zoneCount} named zone${
+                        {usingCustom
+                            ? `${zoneCount} custom zone${
                                   zoneCount === 1 ? "" : "s"
                               } loaded. "Same" means the hider is in the same named zone as your marker.`
-                            : "Load a GeoJSON FeatureCollection of named zones (each feature needs a properties.name), e.g. your municipalities file."}
+                            : 'Using the bundled Denver municipalities. "Same" means the hider is in the same municipality as your marker.'}
                     </p>
-                    <div className="flex justify-center">
+                    <div className="flex justify-center gap-2">
                         <Button
                             variant="outline"
                             size="sm"
@@ -212,10 +213,23 @@ export const MatchingQuestionComponent = ({
                                 namedZoneFileInputRef.current?.click()
                             }
                         >
-                            {zoneCount > 0
+                            {usingCustom
                                 ? "Replace zones (GeoJSON)"
-                                : "Load zones (GeoJSON)"}
+                                : "Load custom zones (GeoJSON)"}
                         </Button>
+                        {usingCustom && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!data.drag || $isLoading}
+                                onClick={() => {
+                                    (data as any).geo = undefined;
+                                    questionModified();
+                                }}
+                            >
+                                Use bundled municipalities
+                            </Button>
+                        )}
                         <input
                             ref={namedZoneFileInputRef}
                             type="file"
