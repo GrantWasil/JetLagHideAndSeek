@@ -33,14 +33,16 @@ import {
 
 import { QuestionCard } from "./base";
 
-// Measuring question types with no valid target inside the Denver game boundary,
-// hidden from the picker for this game.
-// See docs/adr/0003-hide-void-questions.md.
+// Measuring question types hidden from the picker for this game — either void
+// inside the boundary or not one of the game's 20 official measuring questions.
+// See docs/adr/0003-hide-void-questions.md and docs/adr/0005-question-parity.md.
 const HIDDEN_MEASURING_TYPES = new Set<string>([
     "coastline", // landlocked: nearest coast is ~1000 mi outside the boundary
     "airport", // commercial airport: DEN is out of bounds
-    "city", // no place >= 1,000,000 people inside the boundary
+    "city", // "major city" is not an official question (and no >=1M city in-bounds)
     "highspeed-measure-shinkansen", // no high-speed rail in Colorado
+    "mcdonalds", // not an official measuring question (show-only)
+    "seven11", // not an official measuring question (show-only)
 ]);
 
 export const MeasuringQuestionComponent = ({

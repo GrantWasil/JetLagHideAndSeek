@@ -51,5 +51,10 @@ Folded into the existing Zone / Zone-starts-with-same-letter matching question �
 ### D — RTD bus + rail transit — ⬜ STRETCH
 Wire station matching to the transit selection (`matching.ts:326`, node→nwr); add `route=bus` line matching (ref + network=RTD); **nearest-stop via bounded query** (4,473 stops > 1,000-element guard). See [ADR 0004](docs/adr/0004-model-rtd-bus-lines.md).
 
+### F — Rules parity — ✅ audit done; embellishments hidden, gaps backlogged
+Audited every tool option vs the official 20 Matching + 20 Measuring + Radar/Thermometer/Tentacle. See [ADR 0005](docs/adr/0005-question-parity.md).
+- **Hidden as non-official:** Zone/Station "starts with same letter", Major City, McDonald's, 7-Eleven (added to the `HIDDEN_*` sets).
+- **Backlog (official questions not yet built, deferred):** Sea Level (altitude), Body of Water, Street or Path, Metro-line tentacle, 1st/2nd admin-division *border* distance. (International Border and Landmass are void/irrelevant for this boundary.)
+
 ## Verification
 `pnpm exec tsc --noEmit` (expect 10 pre-existing errors) · `pnpm exec vitest run` (17 tests).

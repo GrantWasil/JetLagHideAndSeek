@@ -42,9 +42,11 @@ import { QuestionCard } from "./base";
 // See docs/adr/0003-hide-void-questions.md.
 const HIDDEN_MATCHING_TYPES = new Set<string>([
     "airport", // commercial airport: DEN is out of bounds; in-bounds airfields aren't bookable
-    "major-city", // no place >= 1,000,000 people inside the boundary
+    "major-city", // not one of the 20 real matching questions (and no >=1M city in-bounds)
     "aquarium", // only 1 aquarium in-bounds -> "same" is trivial
     "aquarium-full",
+    "letter-zone", // "Zone Starts With Same Letter" is not a real Jet Lag question
+    "same-first-letter-station", // "Station Starts With Same Letter" is not a real Jet Lag question
 ]);
 
 export const MatchingQuestionComponent = ({
