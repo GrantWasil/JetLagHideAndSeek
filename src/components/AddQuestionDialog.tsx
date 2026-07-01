@@ -71,7 +71,15 @@ export const AddQuestionDialog = ({
                       locationType: "custom",
                       places: [],
                   }
-                : { lat: center.lat, lng: center.lng },
+                : // Medium game: default to the "1 Mile (Typically)" tentacle.
+                  // The 15-mile default is the Large Game variant, hidden for
+                  // this game (see docs/adr/0006-hide-large-game-options.md).
+                  {
+                      lat: center.lat,
+                      lng: center.lng,
+                      radius: 1,
+                      locationType: "museum",
+                  },
         });
         return true;
     };

@@ -32,6 +32,17 @@ import {
 
 import { QuestionCard } from "./base";
 
+// Tentacle location types hidden from the picker for this game. The
+// "15 Miles (Typically)" categories are the Large Game tentacle; we're playing
+// a Medium game, so only the "1 Mile (Typically)" categories are offered.
+// The types stay in the schema so old saved games still parse.
+// See docs/adr/0006-hide-large-game-options.md.
+const HIDDEN_TENTACLE_TYPES = new Set<string>([
+    "theme_park",
+    "zoo",
+    "aquarium",
+]);
+
 export const TentacleQuestionComponent = ({
     data,
     questionKey,
@@ -100,6 +111,12 @@ export const TentacleQuestionComponent = ({
                             .flatMap((x) =>
                                 determineUnionizedStrings(x.shape.locationType),
                             )
+                            .filter(
+                                (x) =>
+                                    !HIDDEN_TENTACLE_TYPES.has(
+                                        (x._def as any).value,
+                                    ),
+                            )
                             .map((x) => [(x._def as any).value, x.description]),
                     )}
                     groups={Object.fromEntries(
@@ -110,12 +127,25 @@ export const TentacleQuestionComponent = ({
                                 Object.fromEntries(
                                     determineUnionizedStrings(
                                         x.shape.locationType,
-                                    ).map((x) => [
-                                        (x._def as any).value,
-                                        x.description,
-                                    ]),
+                                    )
+                                        .filter(
+                                            (x) =>
+                                                !HIDDEN_TENTACLE_TYPES.has(
+                                                    (x._def as any).value,
+                                                ),
+                                        )
+                                        .map((x) => [
+                                            (x._def as any).value,
+                                            x.description,
+                                        ]),
                                 ),
-                            ]),
+                            ])
+                            // Drop groups emptied by the filter (the large-game
+                            // "15 Miles (Typically)" group).
+                            .filter(
+                                ([, options]) =>
+                                    Object.keys(options).length > 0,
+                            ),
                     )}
                     value={data.locationType}
                     onValueChange={async (value) => {

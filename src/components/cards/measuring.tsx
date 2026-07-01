@@ -33,9 +33,12 @@ import {
 
 import { QuestionCard } from "./base";
 
-// Measuring question types hidden from the picker for this game — either void
-// inside the boundary or not one of the game's 20 official measuring questions.
-// See docs/adr/0003-hide-void-questions.md and docs/adr/0005-question-parity.md.
+// Measuring question types hidden from the picker for this game. Reasons:
+//   - void inside the boundary (see docs/adr/0003).
+//   - not one of the game's 20 official measuring questions (see docs/adr/0005).
+//   - large-game-only: we're playing a Medium game, so the "Large Game
+//     variation" of the category questions is hidden (see docs/adr/0006).
+// The underlying types stay in the schema so old saved games still parse.
 const HIDDEN_MEASURING_TYPES = new Set<string>([
     "coastline", // landlocked: nearest coast is ~1000 mi outside the boundary
     "airport", // commercial airport: DEN is out of bounds
@@ -43,6 +46,20 @@ const HIDDEN_MEASURING_TYPES = new Set<string>([
     "highspeed-measure-shinkansen", // no high-speed rail in Colorado
     "mcdonalds", // not an official measuring question (show-only)
     "seven11", // not an official measuring question (show-only)
+    // Large Game variation of the category questions (hiding-zone based). For a
+    // Medium game these are answered with the "(Small+Medium Games)" -full
+    // versions instead. rail-measure (Train Station) stays -- the RTD game uses it.
+    "aquarium",
+    "zoo",
+    "theme_park",
+    "peak",
+    "museum",
+    "hospital",
+    "cinema",
+    "library",
+    "golf_course",
+    "consulate",
+    "park",
 ]);
 
 export const MeasuringQuestionComponent = ({
