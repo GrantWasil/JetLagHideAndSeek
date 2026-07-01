@@ -82,15 +82,7 @@ export const MatchingQuestionComponent = ({
                         <Select
                             trigger="OSM Zone"
                             options={{
-                                2: "OSM Zone 2 (Country)",
-                                3: "OSM Zone 3 (region in Japan)",
-                                4: "OSM Zone 4 (prefecture in Japan)",
-                                5: "OSM Zone 5",
-                                6: "OSM Zone 6 (Counties in Colorado)",
-                                7: "OSM Zone 7",
-                                8: "OSM Zone 8",
-                                9: "OSM Zone 9",
-                                10: "OSM Zone 10",
+                                6: "Counties in Colorado",
                                 "denver-municipalities":
                                     "Denver Municipalities",
                             }}
@@ -100,16 +92,7 @@ export const MatchingQuestionComponent = ({
                                     (data.cat.adminLevel =
                                         value === "denver-municipalities"
                                             ? "denver-municipalities"
-                                            : (parseInt(value) as
-                                                  | 2
-                                                  | 3
-                                                  | 4
-                                                  | 5
-                                                  | 6
-                                                  | 7
-                                                  | 8
-                                                  | 9
-                                                  | 10)),
+                                            : (parseInt(value) as 6)),
                                 )
                             }
                             disabled={!data.drag || $isLoading}
