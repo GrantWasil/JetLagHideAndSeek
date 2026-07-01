@@ -3,6 +3,7 @@ import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type { Map } from "leaflet";
 import { atom, computed, onSet } from "nanostores";
 
+import { DEFAULT_PLAY_BOUNDARY } from "@/lib/defaultPlayBoundary";
 import type {
     AdditionalMapGeoLocations,
     CustomStation,
@@ -35,21 +36,27 @@ if (typeof window === "undefined") {
 export const mapGeoLocation = persistentAtom<OpenStreetMap>(
     "mapGeoLocation",
     {
+        // This fork runs one Denver-metro game, so the default play area is
+        // Denver — not the upstream Japan default. Until a custom play-boundary
+        // polygon is imported, this is the boundary that questions eliminate
+        // against and that the map auto-zooms to. Values match what an in-app
+        // search for "Denver" (relation 1411339) stores. See CONTEXT.md.
         geometry: {
-            coordinates: [36.5748441, 139.2394179],
+            coordinates: [39.7392364, -104.984862],
             type: "Point",
         },
         type: "Feature",
         properties: {
             osm_type: "R",
-            osm_id: 382313,
-            extent: [45.7112046, 122.7141754, 20.2145811, 154.205541],
-            country: "Japan",
+            osm_id: 1411339,
+            extent: [39.9142087, -105.1098845, 39.6143008, -104.5996997],
+            country: "United States",
             osm_key: "place",
-            countrycode: "JP",
-            osm_value: "country",
-            name: "Japan",
-            type: "country",
+            countrycode: "US",
+            osm_value: "city",
+            name: "Denver",
+            state: "Colorado",
+            type: "city",
         },
     },
     {
@@ -76,9 +83,12 @@ export const permanentOverlay = persistentAtom<FeatureCollection | null>(
 export const mapGeoJSON = atom<FeatureCollection<
     Polygon | MultiPolygon
 > | null>(null);
+// Defaults to this fork's Denver-metro play boundary (see defaultPlayBoundary.ts)
+// so a fresh session already has the correct boundary. Drawing a zone or
+// importing a saved game overrides it.
 export const polyGeoJSON = persistentAtom<FeatureCollection<
     Polygon | MultiPolygon
-> | null>("polyGeoJSON", null, {
+> | null>("polyGeoJSON", DEFAULT_PLAY_BOUNDARY, {
     encode: JSON.stringify,
     decode: JSON.parse,
 });
