@@ -5,7 +5,6 @@ import { toast } from "react-toastify";
 import CustomInitDialog from "@/components/CustomInitDialog";
 import { LatitudeLongitude } from "@/components/LatLngPicker";
 import PresetsDialog from "@/components/PresetsDialog";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -70,42 +69,6 @@ export const MatchingQuestionComponent = ({
     const [pendingCustomType, setPendingCustomType] = React.useState<
         "custom-zone" | "custom-points" | null
     >(null);
-    const namedZoneFileInputRef = React.useRef<HTMLInputElement>(null);
-
-    // Load a GeoJSON FeatureCollection of named polygons (e.g. municipalities)
-    // for a "same-named-zone" question. Each feature should carry properties.name.
-    const handleNamedZoneFile = async (
-        e: React.ChangeEvent<HTMLInputElement>,
-    ) => {
-        const file = e.target.files?.[0];
-        e.target.value = ""; // allow re-selecting the same file later
-        if (!file) return;
-        try {
-            const parsed = JSON.parse(await file.text());
-            const features = (parsed?.features ?? []).filter(
-                (f: any) =>
-                    f?.geometry &&
-                    (f.geometry.type === "Polygon" ||
-                        f.geometry.type === "MultiPolygon"),
-            );
-            if (features.length === 0) {
-                toast.error("No polygon features found in that file.");
-                return;
-            }
-            const unnamed = features.filter(
-                (f: any) => !f.properties?.name,
-            ).length;
-            (data as any).geo = { type: "FeatureCollection", features };
-            questionModified();
-            toast.success(
-                `Loaded ${features.length} named zone${
-                    features.length === 1 ? "" : "s"
-                }.${unnamed > 0 ? ` (${unnamed} without a name)` : ""}`,
-            );
-        } catch (err) {
-            toast.error(`Could not read GeoJSON: ${err}`);
-        }
-    };
     const label = `Matching
     ${
         $questions
@@ -191,57 +154,6 @@ export const MatchingQuestionComponent = ({
                 </span>
             );
             break;
-        case "same-named-zone": {
-            const namedZones = (data as any).geo;
-            const zoneCount = namedZones?.features?.length ?? 0;
-            const usingCustom = zoneCount > 0;
-            questionSpecific = (
-                <div className="flex flex-col gap-1 px-2 mb-1">
-                    <p className="text-center text-orange-500">
-                        {usingCustom
-                            ? `${zoneCount} custom zone${
-                                  zoneCount === 1 ? "" : "s"
-                              } loaded. "Same" means the hider is in the same named zone as your marker.`
-                            : 'Using the bundled Denver municipalities. "Same" means the hider is in the same municipality as your marker.'}
-                    </p>
-                    <div className="flex justify-center gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={!data.drag || $isLoading}
-                            onClick={() =>
-                                namedZoneFileInputRef.current?.click()
-                            }
-                        >
-                            {usingCustom
-                                ? "Replace zones (GeoJSON)"
-                                : "Load custom zones (GeoJSON)"}
-                        </Button>
-                        {usingCustom && (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={!data.drag || $isLoading}
-                                onClick={() => {
-                                    (data as any).geo = undefined;
-                                    questionModified();
-                                }}
-                            >
-                                Use bundled municipalities
-                            </Button>
-                        )}
-                        <input
-                            ref={namedZoneFileInputRef}
-                            type="file"
-                            accept=".geojson,.json,application/geo+json,application/json"
-                            className="hidden"
-                            onChange={handleNamedZoneFile}
-                        />
-                    </div>
-                </div>
-            );
-            break;
-        }
         case "custom-zone":
         case "custom-points":
             if (data.drag) {
