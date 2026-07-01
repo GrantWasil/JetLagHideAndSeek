@@ -10,7 +10,7 @@ import {
     polyGeoJSON,
 } from "@/lib/context";
 import { safeUnion } from "@/maps/geo-utils";
-import { bboxCapMiles, clipQuery } from "@/maps/play-boundary";
+import { bboxCapMiles, clipQuery, contains } from "@/maps/play-boundary";
 
 import { cacheFetch, determineCache } from "./cache";
 import {
@@ -138,7 +138,19 @@ nwr["${LOCATION_FIRST_TAG[question.locationType]}"="${question.locationType}"]${
 out center;
     `;
     const data = await getOverpassData(query, text);
-    const elements = data.elements;
+    let elements = data.elements;
+    // Post-filter against the boundary: the server-side (poly:"...") clause
+    // clips to outer rings, but Overpass still matches points inside holes.
+    // Drop any element whose center is not contained by the boundary (ADR 0008).
+    const $polyGeoJSON = polyGeoJSON.get();
+    if ($polyGeoJSON) {
+        elements = elements.filter((el: any) => {
+            const lon = el.center ? el.center.lon : el.lon;
+            const lat = el.center ? el.center.lat : el.lat;
+            if (typeof lon !== "number" || typeof lat !== "number") return true;
+            return contains($polyGeoJSON, turf.point([lon, lat]));
+        });
+    }
     const response = turf.points([]);
     elements.forEach((element: any) => {
         if (!element.tags["name"] && !element.tags["name:en"]) return;
@@ -355,6 +367,19 @@ out ${outType};
         loadingText,
         CacheType.ZONE_CACHE,
     );
+    // Post-filter against the boundary: the server-side (poly:"...") clause
+    // clips to the outer rings, but Overpass still matches points inside holes
+    // (and a MultiPolygon's rings are joined into one clause). Drop any element
+    // whose center is not contained by the boundary. This is the client-side
+    // half of the contract in ADR 0008.
+    if ($polyGeoJSON && data && data.elements) {
+        data.elements = data.elements.filter((el: any) => {
+            const lon = el.center ? el.center.lon : el.lon;
+            const lat = el.center ? el.center.lat : el.lat;
+            if (typeof lon !== "number" || typeof lat !== "number") return true;
+            return contains($polyGeoJSON!, turf.point([lon, lat]));
+        });
+    }
     const subtractedEntries = additionalMapGeoLocations
         .get()
         .filter((e) => !e.added);
