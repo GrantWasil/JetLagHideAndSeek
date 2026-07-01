@@ -16,3 +16,7 @@ This fork is tuned for a Medium Denver-metro RTD game. Several tool options only
 ## Consequence
 
 The picker now offers only the Medium-game form of each category question (the `-full` matching/measuring version and the 1-mile tentacle). A future reader switching this fork to a Large game should reverse these hides — a one-line change per type in the relevant `HIDDEN_*` set — and restore the 15-mile tentacle default in `AddQuestionDialog.tsx`.
+
+## Aside: running locally on Node ≥25
+
+This fork targets Node <25 (`package.json` `engines`, matching CI's Node 24), pinned via `.nvmrc`. Node 25 exposes a broken experimental global `localStorage`; during Astro's server-side render `@nanostores/persistent` detects it and its writes throw `'set' on proxy: trap returned falsish`, crashing `astro dev`/`build`. As a belt-and-suspenders fix, `src/lib/context.ts` forces an in-memory persistence engine when there is no real browser (`typeof window === "undefined"`) — a server render should never share a persisted store across requests anyway. The browser keeps using `localStorage` unchanged, so client and production behavior are untouched, and local dev/build now work on any Node version.

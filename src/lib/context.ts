@@ -1,4 +1,4 @@
-import { persistentAtom } from "@nanostores/persistent";
+import { persistentAtom, setPersistentEngine } from "@nanostores/persistent";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type { Map } from "leaflet";
 import { atom, computed, onSet } from "nanostores";
@@ -18,6 +18,19 @@ import {
     questionsSchema,
     type Units,
 } from "@/maps/schema";
+
+// Node >=25 exposes a broken experimental global `localStorage`, so during
+// server-side render (Astro dev/build) @nanostores/persistent picks it up and
+// its writes throw "'set' on proxy: trap returned falsish". A server render
+// should never share a persisted store across requests anyway, so force an
+// in-memory engine whenever there's no real browser. The browser keeps using
+// localStorage unchanged. See docs/adr/0006-hide-large-game-options.md.
+if (typeof window === "undefined") {
+    setPersistentEngine(
+        {},
+        { addEventListener() {}, removeEventListener() {} },
+    );
+}
 
 export const mapGeoLocation = persistentAtom<OpenStreetMap>(
     "mapGeoLocation",
