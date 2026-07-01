@@ -97,32 +97,38 @@ export const MatchingQuestionComponent = ({
                                 8: "OSM Zone 8",
                                 9: "OSM Zone 9",
                                 10: "OSM Zone 10",
+                                "denver-municipalities":
+                                    "Denver Municipalities",
                             }}
                             value={data.cat.adminLevel.toString()}
                             onValueChange={(value) =>
                                 questionModified(
-                                    (data.cat.adminLevel = parseInt(value) as
-                                        | 2
-                                        | 3
-                                        | 4
-                                        | 5
-                                        | 6
-                                        | 7
-                                        | 8
-                                        | 9
-                                        | 10),
+                                    (data.cat.adminLevel =
+                                        value === "denver-municipalities"
+                                            ? "denver-municipalities"
+                                            : (parseInt(value) as
+                                                  | 2
+                                                  | 3
+                                                  | 4
+                                                  | 5
+                                                  | 6
+                                                  | 7
+                                                  | 8
+                                                  | 9
+                                                  | 10)),
                                 )
                             }
                             disabled={!data.drag || $isLoading}
                         />
                     </SidebarMenuItem>
-                    {data.type === "letter-zone" && (
-                        <span className="px-2 text-center text-orange-500">
-                            Warning: The zone data has been simplified by
-                            &plusmn;360 feet (100 meters) in order for the
-                            browser to not crash.
-                        </span>
-                    )}
+                    {data.type === "letter-zone" &&
+                        data.cat.adminLevel !== "denver-municipalities" && (
+                            <span className="px-2 text-center text-orange-500">
+                                Warning: The zone data has been simplified by
+                                &plusmn;360 feet (100 meters) in order for the
+                                browser to not crash.
+                            </span>
+                        )}
                 </>
             );
             break;
@@ -367,21 +373,6 @@ export const MatchingQuestionComponent = ({
                                 }
                             }
                             // The category should be defined such that no error is thrown if this is a zone question.
-                            if (!(data as any).cat) {
-                                (data as any).cat = { adminLevel: 3 };
-                            }
-                            questionModified((data.type = value));
-                            return;
-                        }
-
-                        if (value === "same-named-zone") {
-                            // Keep a previously-imported FeatureCollection;
-                            // drop stale geo from another question type so the
-                            // card prompts for an import.
-                            const g = (data as any).geo;
-                            if (!g || !Array.isArray(g.features)) {
-                                (data as any).geo = undefined;
-                            }
                             if (!(data as any).cat) {
                                 (data as any).cat = { adminLevel: 3 };
                             }

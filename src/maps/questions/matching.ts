@@ -145,36 +145,21 @@ export const determineMatchingBoundary = _.memoize(
                 boundary = question.geo;
                 break;
             }
-            case "same-named-zone": {
-                // "Same" = hider is in the same named zone as the seeker, so the
-                // boundary is simply the named zone that contains the seeker's
-                // marker. Each named zone is a single (possibly Multi-)Polygon
-                // feature, so no name merging is needed.
-                // Default to the bundled Denver municipalities; question.geo is
-                // only set when the player imported a custom FeatureCollection.
-                const custom = question.geo as
-                    | FeatureCollection<Polygon | MultiPolygon>
-                    | undefined;
-                const collection = custom?.features?.length
-                    ? custom
-                    : await fetchDenverMunicipalities();
-
-                if (!collection?.features?.length) {
-                    return false;
-                }
-
-                const point = turf.point([question.lng, question.lat]);
-                boundary = collection.features.find((feature) =>
-                    turf.booleanPointInPolygon(point, feature),
-                );
-
-                if (!boundary) {
-                    // Seeker's marker isn't inside any named zone.
-                    return false;
-                }
-                break;
-            }
             case "zone": {
+                if (question.cat.adminLevel === "denver-municipalities") {
+                    // Bundled Denver municipalities: the boundary is the
+                    // municipality polygon that contains the seeker's marker.
+                    const point = turf.point([question.lng, question.lat]);
+                    boundary = (
+                        await fetchDenverMunicipalities()
+                    ).features.find((feature) =>
+                        turf.booleanPointInPolygon(point, feature),
+                    );
+                    // Marker isn't inside any municipality — nothing to narrow.
+                    if (!boundary) return false;
+                    break;
+                }
+
                 boundary = await findAdminBoundary(
                     question.lat,
                     question.lng,
@@ -188,6 +173,30 @@ export const determineMatchingBoundary = _.memoize(
                 break;
             }
             case "letter-zone": {
+                if (question.cat.adminLevel === "denver-municipalities") {
+                    // Bundled Denver municipalities: union every municipality
+                    // whose name starts with the same letter as the seeker's.
+                    const collection = await fetchDenverMunicipalities();
+                    const point = turf.point([question.lng, question.lat]);
+                    const containingName = collection.features.find((feature) =>
+                        turf.booleanPointInPolygon(point, feature),
+                    )?.properties?.name;
+
+                    if (!containingName) return false;
+
+                    const letter = containingName[0].toUpperCase();
+                    boundary = safeUnion(
+                        turf.featureCollection(
+                            collection.features.filter(
+                                (feature) =>
+                                    feature.properties?.name?.[0]?.toUpperCase() ===
+                                    letter,
+                            ),
+                        ),
+                    );
+                    break;
+                }
+
                 const zone = await findAdminBoundary(
                     question.lat,
                     question.lng,

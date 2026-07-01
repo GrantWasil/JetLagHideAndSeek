@@ -39,14 +39,14 @@ Feature queries no longer leak out-of-bounds instances, and the runaway search l
 
 Verification for A+B+E: `tsc` 0 new errors (10 pre-existing), `vitest` 17/17, Prettier clean, ESLint clean.
 
-### C — Municipality named-zone matching type — ✅ DONE (verified)
-New `same-named-zone` matching type (see [ADR 0002](docs/adr/0002-admin-zones-county-osm-municipality-custom.md)):
-- `schema.ts`: added `same-named-zone` to `customMatchingQuestionSchema` (reuses `geo`, `same`).
-- `matching.ts`: `determineMatchingBoundary` case picks the FeatureCollection feature containing the seeker's marker (no `turf.combine`); `modifyMapData` + the generic hider-mode path handle same/different. Each named zone is one (Multi)Polygon feature, so no name-merging needed.
-- Municipalities are **bundled**: `public/denver-municipalities.geojson` (~1.2 MB, 36 zones) is served + fetched via `fetchDenverMunicipalities()` and used by default when the question has no custom `geo`. No per-game file load, and nothing bulky is stored in the question/localStorage/shares.
-- `matching.tsx`: card defaults to "Using the bundled Denver municipalities"; an optional "Load custom zones (GeoJSON)" import (`handleNamedZoneFile`) overrides it, with a "Use bundled municipalities" button to revert. Picker entry + `onValueChange` reset of stale geo.
-- Verified end-to-end in-app: type persists/reparses, picker shows it, and it narrows the map to the seeker's named zone. 0 new type errors, 17/17 tests, lint clean.
-- **To use:** add a Matching question → type "Same Named Zone (e.g. Municipality)". Zones load automatically. (To re-generate the bundled file: `python3 denver-game/convert_kml_to_geojson.py <dir-with-kmls>`.)
+### C — Municipalities as a "Denver Municipalities" option in the Zone question — ✅ DONE (verified)
+Folded into the existing Zone / Zone-starts-with-same-letter matching question — no separate matching type (see [ADR 0002](docs/adr/0002-admin-zones-county-osm-municipality-custom.md)):
+- `schema.ts`: `cat.adminLevel` gains a `"denver-municipalities"` sentinel alongside the OSM levels 2–10.
+- `matching.ts`: the `zone` case picks the bundled municipality polygon containing the seeker; the `letter-zone` case unions all municipalities whose name starts with the same letter. `modifyMapData` + the generic hider-mode path handle same/different unchanged.
+- Municipalities are **bundled**: `public/denver-municipalities.geojson` (~1.2 MB, 36 zones) served + fetched via `fetchDenverMunicipalities()`. No per-game file load; nothing bulky stored in the question/localStorage/shares.
+- `matching.tsx`: the zone-level dropdown gains a "Denver Municipalities" entry (non-numeric value handled in `onValueChange`); the ±360 ft simplification warning is hidden for it. The standalone `same-named-zone` type, its card UI, and the GeoJSON file-import were removed.
+- Verified end-to-end in-app: **Zone** + "Denver Municipalities" narrows to the seeker's municipality (Lakewood); **letter-zone** unions same-first-letter municipalities (L → Lakewood/Lakeside/Littleton/Lone Tree/Lafayette). 0 new type errors, 17/17 tests, lint clean.
+- **To use:** add a Matching question → type **Zone** (or **Zone Starts With Same Letter**) → zone-level dropdown → **Denver Municipalities**. (Re-generate the bundled file: `python3 denver-game/convert_kml_to_geojson.py <dir-with-kmls>`.)
 
 ### D — RTD bus + rail transit — ⬜ STRETCH
 Wire station matching to the transit selection (`matching.ts:326`, node→nwr); add `route=bus` line matching (ref + network=RTD); **nearest-stop via bounded query** (4,473 stops > 1,000-element guard). See [ADR 0004](docs/adr/0004-model-rtd-bus-lines.md).
