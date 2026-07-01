@@ -5,11 +5,14 @@ import osmtogeojson from "osmtogeojson";
 import { toast } from "react-toastify";
 
 import {
+    customStations,
+    displayHidingZonesOptions,
     hiderMode,
+    includeDefaultStations,
     mapGeoJSON,
     mapGeoLocation,
     polyGeoJSON,
-    trainStations,
+    useCustomStations,
 } from "@/lib/context";
 import {
     fetchCoastline,
@@ -33,6 +36,12 @@ import type {
     HomeGameMeasuringQuestions,
     MeasuringQuestion,
 } from "@/maps/schema";
+
+import {
+    materializeTransitStations,
+    resolveTransitMeasuringQuestion,
+} from "./transit";
+import { findTransitStationsAroundPoints } from "./transit-overpass";
 
 const highSpeedBase = _.memoize(
     (features: Feature[]) => {
@@ -324,6 +333,7 @@ export const hiderifyMeasuring = async (question: MeasuringQuestion) => {
             drag: false,
             color: "black",
             collapsed: false,
+            hidden: false,
         });
 
         if (!questionNearest || !hiderNearest) {
@@ -339,31 +349,34 @@ export const hiderifyMeasuring = async (question: MeasuringQuestion) => {
     }
 
     if (question.type === "rail-measure") {
-        const stations = trainStations.get();
+        const points = [
+            { lat: question.lat, lng: question.lng },
+            { lat: $hiderMode.latitude, lng: $hiderMode.longitude },
+        ];
+        const needsDefaultStations =
+            !useCustomStations.get() || includeDefaultStations.get();
+        const selection = displayHidingZonesOptions.get();
+        const defaultStations =
+            needsDefaultStations && selection.length > 0
+                ? await findTransitStationsAroundPoints({ selection, points })
+                : [];
+        const stations = materializeTransitStations({
+            defaultStations,
+            customStations: customStations.get(),
+            useCustomStations: useCustomStations.get(),
+            includeDefaultStations: includeDefaultStations.get(),
+            playBoundary: polyGeoJSON.get() ?? undefined,
+        });
+        const result = resolveTransitMeasuringQuestion({
+            question,
+            hiderLocation: {
+                lat: $hiderMode.latitude,
+                lng: $hiderMode.longitude,
+            },
+            stations,
+        });
 
-        if (stations.length === 0) {
-            return question;
-        }
-
-        const location = turf.point([question.lng, question.lat]);
-
-        const nearestTrainStation = turf.nearestPoint(
-            location,
-            turf.featureCollection(stations.map((x) => x.properties)),
-        );
-
-        const distance = turf.distance(location, nearestTrainStation);
-
-        const hider = turf.point([$hiderMode.longitude, $hiderMode.latitude]);
-
-        const hiderNearest = turf.nearestPoint(
-            hider,
-            turf.featureCollection(stations.map((x) => x.properties)),
-        );
-
-        const hiderDistance = turf.distance(hider, hiderNearest);
-
-        question.hiderCloser = hiderDistance < distance;
+        return result.question;
     }
 
     if (question.type === "mcdonalds" || question.type === "seven11") {

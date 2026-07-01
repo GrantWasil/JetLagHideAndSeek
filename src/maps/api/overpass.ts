@@ -197,7 +197,9 @@ export const fetchDenverMunicipalities = async (): Promise<
     return await response.json();
 };
 
-export const trainLineNodeFinder = async (node: string): Promise<number[]> => {
+export const transitLineNodeFinder = async (
+    node: string,
+): Promise<number[]> => {
     const nodeId = node.split("/")[1];
     const tagQuery = `
 [out:json];
@@ -205,19 +207,31 @@ node(${nodeId});
 wr(bn);
 out tags;
 `;
-    const tagData = await getOverpassData(tagQuery, "Finding train line...");
+    const tagData = await getOverpassData(tagQuery, "Finding Transit line...");
     const query = `
 [out:json];
 (
 ${tagData.elements
     .map((element: any) => {
+        if (!element.tags) return "";
         if (
             !element.tags.name &&
             !element.tags["name:en"] &&
-            !element.tags.network
+            !element.tags.network &&
+            !element.tags.ref
         )
             return "";
         let query = "";
+        if (
+            element.tags.route === "bus" &&
+            element.tags.network === "RTD" &&
+            element.tags.ref
+        ) {
+            query += `rel["route"="bus"]["network"="RTD"]["ref"="${element.tags.ref}"];`;
+        }
+        if (element.tags.route && element.tags.ref && element.tags.network) {
+            query += `rel["route"="${element.tags.route}"]["network"="${element.tags.network}"]["ref"="${element.tags.ref}"];`;
+        }
         if (element.tags.name) query += `wr["name"="${element.tags.name}"];`;
         if (element.tags["name:en"])
             query += `wr["name:en"="${element.tags["name:en"]}"];`;
@@ -229,7 +243,7 @@ ${tagData.elements
 );
 out geom;
 `;
-    const data = await getOverpassData(query, "Finding train lines...");
+    const data = await getOverpassData(query, "Finding Transit lines...");
     const geoJSON = osmtogeojson(data);
     const nodes: number[] = [];
     geoJSON.features.forEach((feature: any) => {
@@ -247,6 +261,8 @@ out geom;
     const uniqNodes = _.uniq(nodes);
     return uniqNodes;
 };
+
+export const trainLineNodeFinder = transitLineNodeFinder;
 
 export const findPlacesInZone = async (
     filter: string,
@@ -423,6 +439,7 @@ export const nearestToQuestion = async (
                 drag: false,
                 color: "black",
                 collapsed: false,
+                hidden: false,
             },
             "Finding matching locations...",
         );

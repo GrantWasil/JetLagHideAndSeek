@@ -1,20 +1,18 @@
 import * as turf from "@turf/turf";
-import type {
-    Feature,
-    FeatureCollection,
-    MultiPolygon,
-    Point,
-    Polygon,
-} from "geojson";
+import type { Feature, MultiPolygon, Polygon } from "geojson";
 import _ from "lodash";
 import osmtogeojson from "osmtogeojson";
 import { toast } from "react-toastify";
 
 import {
+    customStations,
+    displayHidingZonesOptions,
     hiderMode,
+    includeDefaultStations,
     mapGeoJSON,
     mapGeoLocation,
     polyGeoJSON,
+    useCustomStations,
 } from "@/lib/context";
 import {
     fetchDenverMunicipalities,
@@ -24,10 +22,17 @@ import {
     LOCATION_FIRST_TAG,
     nearestToQuestion,
     prettifyLocation,
-    trainLineNodeFinder,
 } from "@/maps/api";
 import { holedMask, modifyMapData, safeUnion } from "@/maps/geo-utils";
 import { geoSpatialVoronoi } from "@/maps/geo-utils";
+import {
+    materializeTransitStations,
+    resolveTransitMatchingQuestion,
+} from "@/maps/questions/transit";
+import {
+    findTransitStationsAroundPoints,
+    overpassTransitLineMembershipResolver,
+} from "@/maps/questions/transit-overpass";
 import type {
     APILocations,
     HomeGameMatchingQuestions,
@@ -344,6 +349,7 @@ export const hiderifyMatching = async (question: MatchingQuestion) => {
             drag: false,
             color: "black",
             collapsed: false,
+            hidden: false,
         });
 
         if (!questionNearest || !hiderNearest) {
@@ -363,73 +369,39 @@ export const hiderifyMatching = async (question: MatchingQuestion) => {
         question.type === "same-length-station" ||
         question.type === "same-train-line"
     ) {
-        const hiderPoint = turf.point([
-            $hiderMode.longitude,
-            $hiderMode.latitude,
-        ]);
-        const seekerPoint = turf.point([question.lng, question.lat]);
+        const points = [
+            { lat: question.lat, lng: question.lng },
+            { lat: $hiderMode.latitude, lng: $hiderMode.longitude },
+        ];
+        const needsDefaultStations =
+            !useCustomStations.get() || includeDefaultStations.get();
+        const selection = displayHidingZonesOptions.get();
+        const defaultStations =
+            needsDefaultStations && selection.length > 0
+                ? await findTransitStationsAroundPoints({ selection, points })
+                : [];
+        const stations = materializeTransitStations({
+            defaultStations,
+            customStations: customStations.get(),
+            useCustomStations: useCustomStations.get(),
+            includeDefaultStations: includeDefaultStations.get(),
+            playBoundary: polyGeoJSON.get() ?? undefined,
+        });
+        const result = await resolveTransitMatchingQuestion({
+            question,
+            hiderLocation: {
+                lat: $hiderMode.latitude,
+                lng: $hiderMode.longitude,
+            },
+            stations,
+            resolveLines: overpassTransitLineMembershipResolver,
+        });
 
-        const places = osmtogeojson(
-            await findPlacesInZone(
-                "[railway=station]",
-                "Finding train stations. This may take a while. Do not press any buttons while this is processing. Don't worry, it will be cached.",
-                "node",
-            ),
-        ) as FeatureCollection<Point>;
-
-        const nearestHiderTrainStation = turf.nearestPoint(hiderPoint, places);
-        const nearestSeekerTrainStation = turf.nearestPoint(
-            seekerPoint,
-            places,
-        );
-
-        if (question.type === "same-train-line") {
-            const nodes = await trainLineNodeFinder(
-                nearestSeekerTrainStation.properties.id,
-            );
-
-            const hiderId = parseInt(
-                nearestHiderTrainStation.properties.id.split("/")[1],
-            );
-
-            if (nodes.includes(hiderId)) {
-                question.same = true;
-            } else {
-                question.same = false;
-            }
+        if (result.status === "unsupported" && result.reason) {
+            toast.warning(result.reason);
         }
 
-        const hiderEnglishName =
-            nearestHiderTrainStation.properties["name:en"] ||
-            nearestHiderTrainStation.properties.name;
-        const seekerEnglishName =
-            nearestSeekerTrainStation.properties["name:en"] ||
-            nearestSeekerTrainStation.properties.name;
-
-        if (!hiderEnglishName || !seekerEnglishName) {
-            return question;
-        }
-
-        if (question.type === "same-first-letter-station") {
-            if (
-                hiderEnglishName[0].toUpperCase() ===
-                seekerEnglishName[0].toUpperCase()
-            ) {
-                question.same = true;
-            } else {
-                question.same = false;
-            }
-        } else if (question.type === "same-length-station") {
-            if (hiderEnglishName.length === seekerEnglishName.length) {
-                question.lengthComparison = "same";
-            } else if (hiderEnglishName.length < seekerEnglishName.length) {
-                question.lengthComparison = "shorter";
-            } else {
-                question.lengthComparison = "longer";
-            }
-        }
-
-        return question;
+        return result.question;
     }
 
     const $mapGeoJSON = mapGeoJSON.get();
