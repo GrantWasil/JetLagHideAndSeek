@@ -7,7 +7,6 @@ import { toast } from "react-toastify";
 import {
     hiderMode,
     mapGeoJSON,
-    mapGeoLocation,
     polyGeoJSON,
 } from "@/lib/context";
 import {
@@ -266,9 +265,7 @@ export const determineMatchingBoundary = _.memoize(
             lng: question.lng,
             cat: question.cat,
             geo: question.geo,
-            entirety: polyGeoJSON.get()
-                ? polyGeoJSON.get()
-                : mapGeoLocation.get(),
+            entirety: polyGeoJSON.get(),
         }),
 );
 

@@ -44,6 +44,7 @@ import {
     triggerLocalRefresh,
     useCustomStations,
 } from "@/lib/context";
+import { DEFAULT_PLAY_BOUNDARY } from "@/lib/defaultPlayBoundary";
 import {
     cn,
     compress,
@@ -180,7 +181,7 @@ export const OptionDrawers = ({ className }: { className?: string }) => {
                 );
                 mapGeoLocation.set(geojson);
                 mapGeoJSON.set(null);
-                polyGeoJSON.set(null);
+                polyGeoJSON.set(DEFAULT_PLAY_BOUNDARY);
 
                 if (geojson.alternateLocations) {
                     additionalMapGeoLocations.set(geojson.alternateLocations);

@@ -124,12 +124,12 @@ export const findTentacleLocations = async (
     // the await and again after meant a mid-flight boundary change could make
     // the server query and client post-filter disagree.
     const $polyGeoJSON = polyGeoJSON.get();
-    const polyClauses = $polyGeoJSON ? clipQuery($polyGeoJSON) : [];
+    const polyClauses = clipQuery($polyGeoJSON);
 
-    // Clip candidates to the game boundary (if any): a feature outside the play
-    // boundary must be treated as if it does not exist. One Overpass statement
-    // per outer ring (ORed in the union) so a disconnected MultiPolygon isn't
-    // encoded as one self-intersecting polygon.
+    // Clip candidates to the game boundary: a feature outside the play boundary
+    // must be treated as if it does not exist. One Overpass statement per outer
+    // ring (ORed in the union) so a disconnected MultiPolygon isn't encoded as
+    // one self-intersecting polygon.
     const elementFilter = `nwr["${LOCATION_FIRST_TAG[question.locationType]}"="${question.locationType}"]${LOCATION_EXTRA_FILTER[question.locationType] ?? ""}(around:${turf.convertLength(question.radius, question.unit, "meters")}, ${question.lat}, ${question.lng})`;
     const statements =
         polyClauses.length > 0
@@ -149,14 +149,12 @@ out center;
     // Post-filter against the boundary: the server-side (poly:"...") clause
     // clips to outer rings, but Overpass still matches points inside holes.
     // Drop any element whose center is not contained by the boundary (ADR 0008).
-    if ($polyGeoJSON) {
-        elements = elements.filter((el: any) => {
-            const lon = el.center ? el.center.lon : el.lon;
-            const lat = el.center ? el.center.lat : el.lat;
-            if (typeof lon !== "number" || typeof lat !== "number") return true;
-            return contains($polyGeoJSON, turf.point([lon, lat]));
-        });
-    }
+    elements = elements.filter((el: any) => {
+        const lon = el.center ? el.center.lon : el.lon;
+        const lat = el.center ? el.center.lat : el.lat;
+        if (typeof lon !== "number" || typeof lat !== "number") return true;
+        return contains($polyGeoJSON, turf.point([lon, lat]));
+    });
     const response = turf.points([]);
     elements.forEach((element: any) => {
         if (!element.tags["name"] && !element.tags["name:en"]) return;
@@ -313,63 +311,23 @@ export const findPlacesInZone = async (
 ) => {
     let query = "";
     const $polyGeoJSON = polyGeoJSON.get();
-    if ($polyGeoJSON) {
-        // One Overpass element statement per outer ring (ORed in the union).
-        // clipQuery returns one (poly:"...") clause per ring so disconnected
-        // MultiPolygons aren't encoded as one self-intersecting polygon.
-        const polyClauses = clipQuery($polyGeoJSON);
-        const allFilters = [filter, ...alternatives];
-        const statements = polyClauses
-            .flatMap((clause) =>
-                allFilters.map((f) => `${searchType}${f}${clause};`),
-            )
-            .join("\n");
-        query = `
+    // One Overpass element statement per outer ring (ORed in the union).
+    // clipQuery returns one (poly:"...") clause per ring so disconnected
+    // MultiPolygons aren't encoded as one self-intersecting polygon.
+    const polyClauses = clipQuery($polyGeoJSON);
+    const allFilters = [filter, ...alternatives];
+    const statements = polyClauses
+        .flatMap((clause) =>
+            allFilters.map((f) => `${searchType}${f}${clause};`),
+        )
+        .join("\n");
+    query = `
 [out:json]${timeoutDuration != 0 ? `[timeout:${timeoutDuration}]` : ""};
 (
 ${statements}
 );
 out ${outType};
 `;
-    } else {
-        const primaryLocation = mapGeoLocation.get();
-        const additionalLocations = additionalMapGeoLocations
-            .get()
-            .filter((entry) => entry.added)
-            .map((entry) => entry.location);
-        const allLocations = [primaryLocation, ...additionalLocations];
-        const relationToAreaBlocks = allLocations
-            .map((loc, idx) => {
-                const regionVar = `.region${idx}`;
-                return `relation(${loc.properties.osm_id});map_to_area->${regionVar};`;
-            })
-            .join("\n");
-        const searchBlocks = allLocations
-            .map((_, idx) => {
-                const regionVar = `area.region${idx}`;
-                const altQueries =
-                    alternatives.length > 0
-                        ? alternatives
-                              .map(
-                                  (alt) => `${searchType}${alt}(${regionVar});`,
-                              )
-                              .join("\n")
-                        : "";
-                return `
-            ${searchType}${filter}(${regionVar});
-            ${altQueries}
-          `;
-            })
-            .join("\n");
-        query = `
-        [out:json]${timeoutDuration !== 0 ? `[timeout:${timeoutDuration}]` : ""};
-        ${relationToAreaBlocks}
-        (
-        ${searchBlocks}
-        );
-        out ${outType};
-        `;
-    }
     const data = await getOverpassData(
         query,
         loadingText,
@@ -380,12 +338,12 @@ out ${outType};
     // (and a MultiPolygon's rings are joined into one clause). Drop any element
     // whose center is not contained by the boundary. This is the client-side
     // half of the contract in ADR 0008.
-    if ($polyGeoJSON && data && data.elements) {
+    if (data && data.elements) {
         data.elements = data.elements.filter((el: any) => {
             const lon = el.center ? el.center.lon : el.lon;
             const lat = el.center ? el.center.lat : el.lat;
             if (typeof lon !== "number" || typeof lat !== "number") return true;
-            return contains($polyGeoJSON!, turf.point([lon, lat]));
+            return contains($polyGeoJSON, turf.point([lon, lat]));
         });
     }
     const subtractedEntries = additionalMapGeoLocations
@@ -448,10 +406,7 @@ export const nearestToQuestion = async (
     // Cap the expanding search so a feature type with no in-bounds instance
     // cannot loop forever. findTentacleLocations already clips to the boundary,
     // so once the radius spans the boundary there is nothing more to find.
-    let maxRadius = 300;
-    if ($polyGeoJSON) {
-        maxRadius = bboxCapMiles($polyGeoJSON);
-    }
+    const maxRadius = bboxCapMiles($polyGeoJSON);
 
     let radius = 30;
     let instances: any = { features: [] };

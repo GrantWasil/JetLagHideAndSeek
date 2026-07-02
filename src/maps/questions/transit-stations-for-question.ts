@@ -34,6 +34,6 @@ export const materializeStationsForQuestion = async (
         customStations: customStations.get(),
         useCustomStations: useCustomStations.get(),
         includeDefaultStations: includeDefaultStations.get(),
-        playBoundary: polyGeoJSON.get() ?? undefined,
+        playBoundary: polyGeoJSON.get(),
     });
 };

@@ -31,6 +31,7 @@ import {
     polyGeoJSON,
     questions,
 } from "@/lib/context";
+import { DEFAULT_PLAY_BOUNDARY } from "@/lib/defaultPlayBoundary";
 import { cn } from "@/lib/utils";
 import {
     CacheType,
@@ -169,7 +170,7 @@ export const PlacePicker = ({
                                                     ...$additionalMapGeoLocations,
                                                 ]);
                                                 mapGeoJSON.set(null);
-                                                polyGeoJSON.set(null);
+                                                polyGeoJSON.set(DEFAULT_PLAY_BOUNDARY);
                                                 questions.set([
                                                     ...questions.get(),
                                                 ]);
@@ -191,7 +192,7 @@ export const PlacePicker = ({
                                                     ...$additionalMapGeoLocations,
                                                 ]);
                                                 mapGeoJSON.set(null);
-                                                polyGeoJSON.set(null);
+                                                polyGeoJSON.set(DEFAULT_PLAY_BOUNDARY);
                                                 questions.set([
                                                     ...questions.get(),
                                                 ]);
@@ -243,7 +244,7 @@ export const PlacePicker = ({
                                         }
 
                                         mapGeoJSON.set(null);
-                                        polyGeoJSON.set(null);
+                                        polyGeoJSON.set(DEFAULT_PLAY_BOUNDARY);
                                         questions.set([...questions.get()]);
                                     }}
                                 />
@@ -293,7 +294,7 @@ export const PlacePicker = ({
                                         ]);
 
                                         mapGeoJSON.set(null);
-                                        polyGeoJSON.set(null);
+                                        polyGeoJSON.set(DEFAULT_PLAY_BOUNDARY);
                                         questions.set([...questions.get()]);
                                     }}
                                     className="cursor-pointer"
@@ -315,7 +316,7 @@ export const PlacePicker = ({
                         className="font-normal bg-slate-50 hover:bg-slate-200"
                         onClick={() => {
                             mapGeoJSON.set(null);
-                            polyGeoJSON.set(null);
+                            polyGeoJSON.set(DEFAULT_PLAY_BOUNDARY);
                             questions.set([]);
                             clearCache(CacheType.ZONE_CACHE);
                         }}
@@ -327,7 +328,7 @@ export const PlacePicker = ({
                             variant="outline"
                             className="font-normal hover:bg-slate-200"
                             onClick={() => {
-                                polyGeoJSON.set(null);
+                                polyGeoJSON.set(DEFAULT_PLAY_BOUNDARY);
                                 mapGeoJSON.set(null);
                                 questions.set([...questions.get()]);
                             }}

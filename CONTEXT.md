@@ -12,6 +12,8 @@ _Avoid_: map area, region, zone, bounding box.
 
 The boundary lives in app state as the `polyGeoJSON` atom (`src/lib/context.ts`); its geometry operations — clipping an Overpass query to it, testing whether a point is inside it, and capping a search radius to its bbox — are owned by the deep `src/maps/play-boundary.ts` module (`clipQuery`, `contains`, `bboxCapMiles`). The atom is the state; the module is the geometry. (See ADR 0008.)
 
+The `polyGeoJSON` atom is **never null**. The cleared/reset state _is_ `DEFAULT_PLAY_BOUNDARY` — the Denver-metro polygon — not a sentinel null. (A searched-point fallback exists in upstream but is unused here.) This removes the ambiguity where `null` meant both "reset" and "use the searched Denver point," which caused "Clear Questions & Cache" to reset the boundary to Denver-the-point. Stale `null` persisted from before the fix is migrated to `DEFAULT_PLAY_BOUNDARY` on load. (See ADR 0013.)
+
 **Void Question**:
 A question whose feature type has no qualifying instance inside the Play Boundary, so per the rules it can only return a null answer (which still counts as answered). For this game these include commercial airport (DEN is out of bounds), coastline, and high-speed rail.
 _Avoid_: dead question, disabled question.

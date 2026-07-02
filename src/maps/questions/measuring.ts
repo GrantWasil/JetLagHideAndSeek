@@ -7,7 +7,6 @@ import { toast } from "react-toastify";
 import {
     hiderMode,
     mapGeoJSON,
-    mapGeoLocation,
     polyGeoJSON,
 } from "@/lib/context";
 import {
@@ -244,9 +243,7 @@ const bufferedDeterminer = _.memoize(
             type: question.type,
             lat: question.lat,
             lng: question.lng,
-            entirety: polyGeoJSON.get()
-                ? polyGeoJSON.get()
-                : mapGeoLocation.get(),
+            entirety: polyGeoJSON.get(),
             geo: (question as any).geo,
         }),
 );

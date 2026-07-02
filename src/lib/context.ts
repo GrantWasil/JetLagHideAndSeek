@@ -83,14 +83,43 @@ export const permanentOverlay = persistentAtom<FeatureCollection | null>(
 export const mapGeoJSON = atom<FeatureCollection<
     Polygon | MultiPolygon
 > | null>(null);
-// Defaults to this fork's Denver-metro play boundary (see defaultPlayBoundary.ts)
-// so a fresh session already has the correct boundary. Drawing a zone or
-// importing a saved game overrides it.
+
+// The Play Boundary is NEVER null in this fork. `null` used to be the
+// "cleared/reset" signal, but the `hidingZone` computed reinterpreted it as
+// "fall back to the searched Denver point" — one value, two meanings, which is
+// exactly what made "Clear Questions & Cache" reset the boundary to Denver
+// (the point) instead of the Denver-metro polygon. Eliminating null as a
+// reachable state removes that ambiguity entirely. The atom's value is always
+// a polygon; "cleared" is represented by DEFAULT_PLAY_BOUNDARY itself.
+// (See ADR 0013.)
+//
+// `decodePlayBoundary` also migrates any stale `null` already persisted in a
+// returning user's localStorage: once it normalizes to the default, the next
+// write persists the canonical boundary and the migration is one-time.
+export const isFeatureCollection = (
+    value: unknown,
+): value is FeatureCollection<Polygon | MultiPolygon> =>
+    typeof value === "object" &&
+    value !== null &&
+    (value as { type?: unknown }).type === "FeatureCollection" &&
+    Array.isArray((value as { features?: unknown }).features);
+
+export const decodePlayBoundary = (
+    raw: string,
+): FeatureCollection<Polygon | MultiPolygon> => {
+    try {
+        const parsed = JSON.parse(raw);
+        return isFeatureCollection(parsed) ? parsed : DEFAULT_PLAY_BOUNDARY;
+    } catch {
+        return DEFAULT_PLAY_BOUNDARY;
+    }
+};
+
 export const polyGeoJSON = persistentAtom<FeatureCollection<
     Polygon | MultiPolygon
-> | null>("polyGeoJSON", DEFAULT_PLAY_BOUNDARY, {
+>>("polyGeoJSON", DEFAULT_PLAY_BOUNDARY, {
     encode: JSON.stringify,
-    decode: JSON.parse,
+    decode: decodePlayBoundary,
 });
 
 export const questions = persistentAtom<Questions>("questions", [], {
@@ -282,8 +311,6 @@ export const hidingZone = computed(
     [
         questions,
         polyGeoJSON,
-        mapGeoLocation,
-        additionalMapGeoLocations,
         disabledStations,
         hidingRadius,
         hidingRadiusUnits,
@@ -297,8 +324,6 @@ export const hidingZone = computed(
     (
         q,
         geo,
-        loc,
-        altLoc,
         disabledStations,
         radius,
         hidingRadiusUnits,
@@ -309,38 +334,23 @@ export const hidingZone = computed(
         presets,
         $permanentOverlay,
     ) => {
-        if (geo !== null) {
-            return {
-                ...geo,
-                questions: q,
-                disabledStations: disabledStations,
-                hidingRadius: radius,
-                hidingRadiusUnits,
-                zoneOptions: zoneOptions,
-                useCustomStations: useCustom,
-                customStations: $customStations,
-                includeDefaultStations: includeDefault,
-                presets: structuredClone(presets),
-                permanentOverlay: $permanentOverlay,
-            };
-        } else {
-            const $loc = structuredClone(loc);
-            $loc.properties.isHidingZone = true;
-            $loc.properties.questions = q;
-            return {
-                ...$loc,
-                disabledStations: disabledStations,
-                hidingRadius: radius,
-                hidingRadiusUnits,
-                alternateLocations: structuredClone(altLoc),
-                zoneOptions: zoneOptions,
-                useCustomStations: useCustom,
-                customStations: $customStations,
-                includeDefaultStations: includeDefault,
-                presets: structuredClone(presets),
-                permanentOverlay: $permanentOverlay,
-            };
-        }
+        // `geo` is never null (see polyGeoJSON above). The previous
+        // searched-location `else` branch is gone: this fork only ever plays
+        // inside the fixed polygon boundary, so the output is always
+        // polygon-format.
+        return {
+            ...geo,
+            questions: q,
+            disabledStations: disabledStations,
+            hidingRadius: radius,
+            hidingRadiusUnits,
+            zoneOptions: zoneOptions,
+            useCustomStations: useCustom,
+            customStations: $customStations,
+            includeDefaultStations: includeDefault,
+            presets: structuredClone(presets),
+            permanentOverlay: $permanentOverlay,
+        };
     },
 );
 

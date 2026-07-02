@@ -221,7 +221,7 @@ export const ZoneSidebar = () => {
                 customStations: $customStations,
                 useCustomStations,
                 includeDefaultStations,
-                playBoundary: polyGeoJSON.get() ?? undefined,
+                playBoundary: polyGeoJSON.get(),
             });
 
             // merge duplicate stations if selected
