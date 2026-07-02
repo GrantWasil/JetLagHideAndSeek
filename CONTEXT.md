@@ -37,3 +37,15 @@ _Avoid_: train-only, subway, metro.
 **Major City**:
 A `place=city` with population ≥ 1,000,000 (upstream's definition). No place inside the Play Boundary meets that bar (Denver proper ≈ 715k), so for this game it is a **Void Question**, hidden from the matching/measuring pickers.
 _Avoid_: big city, metropolis.
+
+**Hider Location**:
+The point on the map representing where the hider currently is. It exists in exactly one of two commitment states at any time (see Pending Hider Location and Confirmed Hider Location). Enabling hider mode creates it in the Pending state; disabling hider mode removes it entirely and resets the lifecycle.
+_Avoid_: hider pin, hider marker, hider point.
+
+**Pending Hider Location**:
+A Hider Location the hider has not yet committed. It is movable — the hider may drag, search, or type coordinates freely — and a confirm affordance is shown beside it. It becomes a Confirmed Hider Location only through an explicit confirm action by the hider (never automatically).
+_Avoid_: unlocked location, draft location.
+
+**Confirmed Hider Location**:
+A Hider Location the hider has committed. It is immovable on every surface (map drag, marker dialog, and options drawer) until the hider explicitly returns it to the Pending state. This state exists to prevent the hider from accidentally moving the pin on a touch screen. "Locked" and "unlock" describe the consequence and its inverse action, not a separate state.
+_Avoid_: locked location, finalized location.

@@ -28,6 +28,18 @@ import { SidebarMenu } from "./ui/sidebar-l";
 
 let isDragging = false;
 
+// Inline SVG data URL for the confirm affordance (green circle with a white
+// check). Inlined rather than fetched so it never depends on network. Shown
+// beside the hider pin only while Pending; tapping it confirms the location.
+const confirmIconUrl =
+    "data:image/svg+xml;utf8," +
+    encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28">' +
+            '<circle cx="14" cy="14" r="13" fill="#16a34a" stroke="white" stroke-width="2"/>' +
+            '<path d="M8 14.5l4 4 8-9" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>' +
+            "</svg>",
+    );
+
 const ColoredMarker = ({
     latitude,
     longitude,
@@ -35,6 +47,7 @@ const ColoredMarker = ({
     onChange,
     questionKey,
     sub = "",
+    draggable = true,
 }: {
     onChange: (event: DragEndEvent) => void;
     latitude: number;
@@ -42,6 +55,7 @@ const ColoredMarker = ({
     color: keyof typeof ICON_COLORS;
     questionKey: number;
     sub?: string;
+    draggable?: boolean;
 }) => {
     const $questions = useStore(questions);
     const $hiderMode = useStore(hiderMode);
@@ -65,7 +79,7 @@ const ColoredMarker = ({
                           })
                         : undefined
                 }
-                draggable={true}
+                draggable={draggable}
                 eventHandlers={{
                     dragstart: () => {
                         isDragging = true;
@@ -94,8 +108,13 @@ const ColoredMarker = ({
                                 latitude={$hiderMode.latitude}
                                 longitude={$hiderMode.longitude}
                                 inlineEdit
+                                // A Confirmed location is read-only here too;
+                                // the editor is disabled until the hider
+                                // unlocks from the Options drawer.
+                                disabled={$hiderMode.confirmed}
                                 onChange={(latitude, longitude) => {
                                     hiderMode.set({
+                                        ...$hiderMode,
                                         latitude:
                                             latitude ?? $hiderMode.latitude,
                                         longitude:
@@ -104,6 +123,12 @@ const ColoredMarker = ({
                                 }}
                                 label="Hider Location"
                             />
+                            {$hiderMode.confirmed && (
+                                <p className="text-center text-sm font-oxygen opacity-80">
+                                    Location confirmed. Unlock in Options to
+                                    move.
+                                </p>
+                            )}
                         </SidebarMenu>
                     </>
                 )}
@@ -192,28 +217,67 @@ export const DraggableMarkers = () => {
     return (
         <Fragment>
             {$hiderMode !== false && (
-                <ColoredMarker
-                    color="green"
-                    key="hider"
-                    sub="Hider Location"
-                    questionKey={-1}
-                    latitude={$hiderMode.latitude}
-                    longitude={$hiderMode.longitude}
-                    onChange={(e) => {
-                        $hiderMode.latitude =
-                            e.target.getLatLng().lat ?? $hiderMode.latitude;
-                        $hiderMode.longitude =
-                            e.target.getLatLng().lng ?? $hiderMode.longitude;
+                <>
+                    <ColoredMarker
+                        color="green"
+                        key="hider"
+                        sub="Hider Location"
+                        questionKey={-1}
+                        latitude={$hiderMode.latitude}
+                        longitude={$hiderMode.longitude}
+                        // A Confirmed Hider Location is immovable on the
+                        // map; only Pending can be dragged. This is the
+                        // mobile accidental-drag protection.
+                        draggable={!$hiderMode.confirmed}
+                        onChange={(e) => {
+                            $hiderMode.latitude =
+                                e.target.getLatLng().lat ?? $hiderMode.latitude;
+                            $hiderMode.longitude =
+                                e.target.getLatLng().lng ??
+                                $hiderMode.longitude;
 
-                        if (autoSave.get()) {
-                            hiderMode.set({
-                                ...$hiderMode,
-                            });
-                        } else {
-                            triggerLocalRefresh.set(Math.random());
-                        }
-                    }}
-                />
+                            if (autoSave.get()) {
+                                hiderMode.set({
+                                    ...$hiderMode,
+                                });
+                            } else {
+                                triggerLocalRefresh.set(Math.random());
+                            }
+                        }}
+                    />
+                    {/* Confirm affordance: shown only while Pending. A
+                       separate, non-draggable marker with its own click
+                       handler so its tap is never confused with the pin's
+                       drag/click. Tapping it is the sole way to transition
+                       Pending → Confirmed. */}
+                    {!$hiderMode.confirmed && (
+                        <Marker
+                            key="hider-confirm"
+                            position={[
+                                $hiderMode.latitude,
+                                $hiderMode.longitude + 0.001,
+                            ]}
+                            interactive={true}
+                            keyboard={false}
+                            zIndexOffset={1000}
+                            icon={
+                                new Icon({
+                                    iconUrl: confirmIconUrl,
+                                    iconSize: [28, 28],
+                                    iconAnchor: [14, 14],
+                                })
+                            }
+                            eventHandlers={{
+                                click: () => {
+                                    hiderMode.set({
+                                        ...$hiderMode,
+                                        confirmed: true,
+                                    });
+                                },
+                            }}
+                        />
+                    )}
+                </>
             )}
             {$questions.map((question) => {
                 if (!question.data) return null;

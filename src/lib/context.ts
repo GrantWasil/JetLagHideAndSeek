@@ -115,9 +115,9 @@ export const decodePlayBoundary = (
     }
 };
 
-export const polyGeoJSON = persistentAtom<FeatureCollection<
-    Polygon | MultiPolygon
->>("polyGeoJSON", DEFAULT_PLAY_BOUNDARY, {
+export const polyGeoJSON = persistentAtom<
+    FeatureCollection<Polygon | MultiPolygon>
+>("polyGeoJSON", DEFAULT_PLAY_BOUNDARY, {
     encode: JSON.stringify,
     decode: decodePlayBoundary,
 });
@@ -140,15 +140,51 @@ export const questionModified = (..._: any[]) => {
 export const leafletMapContext = atom<Map | null>(null);
 
 export const defaultUnit = persistentAtom<Units>("defaultUnit", "miles");
-export const hiderMode = persistentAtom<
-    | false
-    | {
-          latitude: number;
-          longitude: number;
-      }
->("isHiderMode", false, {
+// A Hider Location exists in exactly one of two commitment states: Pending
+// (movable) or Confirmed (immovable). See CONTEXT.md.
+//
+// `decodeHiderMode` migrates stale persisted state from before the
+// `confirmed` field existed: a legacy `{latitude, longitude}` object decodes
+// to `{..., confirmed: false}` (Pending), and the literal `false` is
+// preserved unchanged. Once normalized, the next write persists the canonical
+// shape and the migration is one-time. (Mirrors the decodePlayBoundary
+// migration pattern; see ADR 0013 for the boundary equivalent.)
+export type HiderMode = false | HiderLocation;
+export type HiderLocation = {
+    latitude: number;
+    longitude: number;
+    confirmed: boolean;
+};
+
+export const decodeHiderMode = (raw: string): HiderMode => {
+    try {
+        const parsed = JSON.parse(raw);
+        if (parsed === false) return false;
+        if (
+            typeof parsed === "object" &&
+            parsed !== null &&
+            typeof parsed.latitude === "number" &&
+            typeof parsed.longitude === "number"
+        ) {
+            return {
+                latitude: parsed.latitude,
+                longitude: parsed.longitude,
+                // Legacy objects carry no `confirmed` — treat as Pending.
+                confirmed:
+                    typeof parsed.confirmed === "boolean"
+                        ? parsed.confirmed
+                        : false,
+            };
+        }
+    } catch {
+        // fall through to default
+    }
+    return false;
+};
+
+export const hiderMode = persistentAtom<HiderMode>("isHiderMode", false, {
     encode: JSON.stringify,
-    decode: JSON.parse,
+    decode: decodeHiderMode,
 });
 export const triggerLocalRefresh = atom<number>(0);
 export const displayHidingZones = persistentAtom<boolean>(

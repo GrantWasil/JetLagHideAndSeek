@@ -657,17 +657,24 @@ export const OptionDrawers = ({ className }: { className?: string }) => {
                                             const $leafletMapContext =
                                                 leafletMapContext.get();
 
+                                            // Enabling always creates the
+                                            // Hider Location in the Pending
+                                            // state (movable, not yet
+                                            // committed) — never a restore of
+                                            // a previously Confirmed location.
                                             if ($leafletMapContext) {
                                                 const center =
                                                     $leafletMapContext.getCenter();
                                                 hiderMode.set({
                                                     latitude: center.lat,
                                                     longitude: center.lng,
+                                                    confirmed: false,
                                                 });
                                             } else {
                                                 hiderMode.set({
                                                     latitude: 0,
                                                     longitude: 0,
+                                                    confirmed: false,
                                                 });
                                             }
                                         } else {
@@ -678,9 +685,30 @@ export const OptionDrawers = ({ className }: { className?: string }) => {
                             </div>
                             {$hiderMode !== false && (
                                 <SidebarMenu>
+                                    {$hiderMode.confirmed && (
+                                        <SidebarMenuItem>
+                                            <SidebarMenuButton
+                                                className="bg-blue-600 p-2 rounded-md font-semibold font-poppins transition-shadow duration-500 mt-2"
+                                                // Unlock returns a Confirmed
+                                                // Hider Location to Pending so
+                                                // it can be moved again. The
+                                                // only state-transition path
+                                                // out of Confirmed.
+                                                onClick={() => {
+                                                    hiderMode.set({
+                                                        ...$hiderMode,
+                                                        confirmed: false,
+                                                    });
+                                                }}
+                                            >
+                                                Unlock Location
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    )}
                                     <LatitudeLongitude
                                         latitude={$hiderMode.latitude}
                                         longitude={$hiderMode.longitude}
+                                        disabled={$hiderMode.confirmed}
                                         inlineEdit
                                         onChange={(latitude, longitude) => {
                                             $hiderMode.latitude =
